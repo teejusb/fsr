@@ -21,15 +21,12 @@ import {
   Route,
 } from "react-router-dom";
 
-var kCurValues = [400, 300, 200, 800];
+let kCurValues = [0, 0, 0, 0];
 const socket = io.connect();
 
 //receive details from server
 socket.on('newnumber', function(msg) {
-  kCurValues[0] = msg.num0;
-  kCurValues[1] = msg.num1;
-  kCurValues[2] = msg.num2;
-  kCurValues[3] = msg.num3;
+  kCurValues = msg.numbers;
   console.log("Received numbers: " + kCurValues.toString());
 });
 
@@ -58,7 +55,7 @@ function NavBar() {
 }
 
 function Slider(props) {
-  const [sliderVal, setSliderVal] = useState(100);
+  const [sliderVal, setSliderVal] = useState(kCurValues[parseInt(props.index)]);
 
   function EmitSliderVal(val) {
     socket.emit('update_threshold', parseInt(props.index), val);
@@ -190,6 +187,16 @@ function WebUI() {
 
 function App() {
   const [currentTime, setCurrentTime] = useState(0);
+  const [fetched, setFetched] = useState(false);
+
+  useEffect(() => {
+    fetch('/defaults').then(res => res.json()).then(data => {
+      if (!fetched) {
+        kCurValues = data.thresholds;
+        setFetched(true);
+      }
+    });
+  }, [fetched]);
 
   useEffect(() => {
     fetch('/time').then(res => res.json()).then(data => {
@@ -197,27 +204,31 @@ function App() {
     });
   }, []);
 
+  // Don't render anything until the defaults are fetched.
   return (
-    <div className="App">
-      <NavBar />
-      <Router>
-        <Switch>
-          <Route exact path="/">
-            <WebUI />
-          </Route>
-          <Route path="/config">
-            <header className="App-header">
-              <p>The current time is {currentTime}.</p>
-            </header>
-          </Route>
-          <Route path="/plot">
-            <header className="App-header">
-              <p>Plot</p>
-            </header>
-          </Route>
-        </Switch>
-      </Router>
-    </div>
+    fetched ?
+      <div className="App">
+        <NavBar />
+        <Router>
+          <Switch>
+            <Route exact path="/">
+              <WebUI />
+            </Route>
+            <Route path="/config">
+              <header className="App-header">
+                <p>The current time is {currentTime}.</p>
+              </header>
+            </Route>
+            <Route path="/plot">
+              <header className="App-header">
+                <p>Plot</p>
+              </header>
+            </Route>
+          </Switch>
+        </Router>
+      </div>
+    :
+    <></>
   );
 }
 
