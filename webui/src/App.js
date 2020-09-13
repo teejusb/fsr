@@ -21,14 +21,8 @@ import {
   Route,
 } from "react-router-dom";
 
-let kCurValues = [0, 0, 0, 0];
+let kCurThresholds = [0, 0, 0, 0];
 const socket = io.connect();
-
-//receive details from server
-socket.on('newnumber', function(msg) {
-  kCurValues = msg.numbers;
-  console.log("Received numbers: " + kCurValues.toString());
-});
 
 function NavBar() {
   return (
@@ -55,7 +49,7 @@ function NavBar() {
 }
 
 function Slider(props) {
-  const [sliderVal, setSliderVal] = useState(kCurValues[parseInt(props.index)]);
+  const [sliderVal, setSliderVal] = useState(kCurThresholds[parseInt(props.index)]);
 
   function EmitSliderVal(val) {
     socket.emit('update_threshold', parseInt(props.index), val);
@@ -103,42 +97,50 @@ function Slider(props) {
 }
 
 function Canvas(props) {
+  const [currentValue, setCurrentValue] = useState(0);
   const labelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
 
   useEffect(() => {
     let requestId;
 
-    const render = () => {
-      const label = labelRef.current;
-      const canvas = canvasRef.current;
+    socket.on('newnumber' + props.index, function(msg) {
+      setCurrentValue(msg.value);
+      // console.log("Received numbers: " + kCurValues.toString());
+    });
 
-      // Adjust DPI so that all the edges are smooth during scaling.
-      const dpi = window.devicePixelRatio;
-      const style = {
-        height() {
-          return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
-        },
-        width() {
-          return +getComputedStyle(canvas).getPropertyValue('width').slice(0,-2);
-        }
+    // ********** Canvas setup **********
+    const label = labelRef.current;
+    const canvas = canvasRef.current;
+
+    // Adjust DPI so that all the edges are smooth during scaling.
+    const dpi = window.devicePixelRatio;
+    const style = {
+      height() {
+        return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
+      },
+      width() {
+        return +getComputedStyle(canvas).getPropertyValue('width').slice(0,-2);
       }
-      canvas.setAttribute('width', style.width() * dpi);
-      canvas.setAttribute('height', style.height() * dpi);
+    }
+    canvas.setAttribute('width', style.width() * dpi);
+    canvas.setAttribute('height', style.height() * dpi);
 
-      // Add background fill.
-      const ctx = canvas.getContext('2d');
-      let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
-      grd.addColorStop(0, 'lightblue');
-      grd.addColorStop(1, 'gray');
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Add background fill.
+    const ctx = canvas.getContext('2d');
+    let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
+    grd.addColorStop(0, 'lightblue');
+    grd.addColorStop(1, 'gray');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // ***********************************
+
+    const render = () => {
       // Bar
       const maxHeight = canvas.height;
-      const curValue = kCurValues[parseInt(props.index)];
-      label.innerHTML = curValue;
-      const position = maxHeight - curValue/1023 * maxHeight;
+      label.innerHTML = currentValue;
+      const position = maxHeight - currentValue/1023 * maxHeight;
       grd = ctx.createLinearGradient(canvas.width/2, canvas.height, canvas.width/2, position);
       grd.addColorStop(0, 'orange');
       grd.addColorStop(1, 'red');
@@ -151,6 +153,7 @@ function Canvas(props) {
     render();
 
     return () => {
+      socket.off('newnumber' + props.index);
       cancelAnimationFrame(requestId);
     };
   });
@@ -192,7 +195,7 @@ function App() {
   useEffect(() => {
     fetch('/defaults').then(res => res.json()).then(data => {
       if (!fetched) {
-        kCurValues = data.thresholds;
+        kCurThresholds = data.thresholds;
         setFetched(true);
       }
     });

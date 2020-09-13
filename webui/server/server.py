@@ -23,11 +23,14 @@ def randomNumberGenerator():
   """
   #infinite loop of magical random numbers
   print("Making random numbers")
+  numbers = [randint(0, 1023) for _ in range(4)]
   while not thread_stop_event.isSet():
-    numbers = [randint(0, 1023) for _ in range(4)]
+    offsets = [randint(-20, 20) for _ in range(4)]
+    numbers = [max(0, min(numbers[i] + offsets[i], 1023)) for i in range(4)]
     print(str(numbers))
-    socketio.emit('newnumber', {'numbers': numbers})
-    socketio.sleep(5)
+    for i in range(4):
+      socketio.emit('newnumber' + str(i), {'value': numbers[i]})
+    socketio.sleep(0.05)
 
 @app.route('/defaults')
 def get_defaults():
