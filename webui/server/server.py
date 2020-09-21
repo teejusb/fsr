@@ -57,9 +57,7 @@ class SerialHandler(object):
     while not thread_stop_event.isSet():
       offsets = [int(normalvariate(0, 5)) for _ in range(4)]
       numbers = [max(0, min(numbers[i] + offsets[i], 1023)) for i in range(4)]
-      # print(str(numbers))
-      for i in range(4):
-        socketio.emit('newnumber' + str(i), {'value': numbers[i]})
+      socketio.emit('get_values', {'values': numbers})
       socketio.sleep(0.01)
       # if not self.ser:
       #   self.Open()

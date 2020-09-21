@@ -19,38 +19,28 @@ import {
   BrowserRouter as Router,
   Switch,
   Route,
+  Link
 } from "react-router-dom";
 
-let kCurThresholds = [0, 0, 0, 0];
 const socket = io("127.0.0.1:5000");
+
+let kCurThresholds = [0, 0, 0, 0];
+let kCurValues = [[0, 0, 0, 0]]
+const max_size = 1000;
+let oldest = 0;
+
+socket.on('get_values', function(msg) {
+  if (kCurValues.length < max_size) {
+    kCurValues.push(msg.values);
+  } else {
+    kCurValues[oldest] = msg.values;
+    oldest = (oldest + 1) % max_size;
+  }
+});
 
 socket.on('thresholds', function(msg) {
   kCurThresholds = msg.thresholds;
 });
-
-function NavBar() {
-  return (
-    <Navbar bg="light">
-      <Navbar.Brand href="/">FSR WebUI</Navbar.Brand>
-      <Nav>
-        <Nav.Item>
-          <Nav.Link href="/config">Config</Nav.Link>
-        </Nav.Item>
-        <Nav.Item>
-          <Nav.Link href="/plot">Plot</Nav.Link>
-        </Nav.Item>
-      </Nav>
-      <Nav className="ml-auto">
-        <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-          <NavDropdown.Item href="#action/3.1">Action</NavDropdown.Item>
-          <NavDropdown.Item href="#action/3.2">Another action</NavDropdown.Item>
-          <NavDropdown.Item href="#action/3.3">Something</NavDropdown.Item>
-          <NavDropdown.Item href="#action/3.4">Separated link</NavDropdown.Item>
-        </NavDropdown>
-      </Nav>
-    </Navbar>
-  );
-}
 
 function Canvas(props) {
   const index = parseInt(props.index)
@@ -83,12 +73,6 @@ function Canvas(props) {
 
   useEffect(() => {
     let requestId;
-    let currentValue = 0;
-
-    socket.on('newnumber' + index, function(msg) {
-      currentValue = msg.value;
-      // console.log("Received numbers: " + kCurValues.toString());
-    });
 
     const canvas = canvasRef.current;
 
@@ -160,6 +144,13 @@ function Canvas(props) {
       canvas.setAttribute('width', style.width() * dpi);
       canvas.setAttribute('height', style.height() * dpi);
       // **********************************
+
+      let currentValue = 0;
+      if (kCurValues.length < max_size) {
+        currentValue = kCurValues[kCurValues.length-1][index];
+      } else {
+        currentValue = kCurValues[((oldest - 1) % max_size + max_size) % max_size][index];
+      }
 
       // Add background fill.
       const ctx = canvas.getContext('2d');
@@ -255,19 +246,6 @@ function Plot() {
     let requestId;
     const canvas = canvasRef.current;
 
-    let currentValues = []
-    const max_size = 1000;
-    let oldest = 0;
-
-    socket.on('newnumber0', function(msg) {
-      if (currentValues.length < max_size) {
-        currentValues.push(msg.value);
-      } else {
-        currentValues[oldest] = msg.value;
-        oldest = (oldest + 1) % max_size;
-      }
-    });
-
     const render = () => {
       // ********** Canvas setup **********
       // This has to be here in case the user resizes the window.
@@ -308,30 +286,37 @@ function Plot() {
         ctx.stroke();
       }
 
-      const num_divisions = 5;
-      for (let i = 1; i < num_divisions; ++i) {
-        drawDashedLine(ctx, [20, 5], spacing, box_height-(box_height/num_divisions)*i + spacing, box_width + spacing);
+      const main_division = 100;
+      for (let i = 1; i*main_division < 1023; ++i) {
+        const pattern = i % 2 === 0 ? [20, 5] : [5, 10];
+        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*main_division)/1023), box_width + spacing);
       }
 
       const px_per_div = box_width/max_size;
-      ctx.beginPath();
-      ctx.setLineDash([]);
-      for (let i = 0; i < max_size; ++i) {
-        if (i === currentValues.length) { break; }
-        if (i === 0) {
-          ctx.moveTo(px_per_div*i + spacing, box_height - box_height * currentValues[(i + oldest) % max_size]/1023 + spacing);
-        } else {
-          ctx.lineTo(px_per_div*i + spacing, box_height - box_height * currentValues[(i + oldest) % max_size]/1023 + spacing);
+      const colors = ['red', 'orange', 'green', 'blue'];
+      for (let j = 0; j < 4; ++j) {
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = colors[j];
+        for (let i = 0; i < max_size; ++i) {
+          if (i === kCurValues.length) { break; }
+          if (i === 0) {
+            ctx.moveTo(px_per_div*i + spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+          } else {
+            ctx.lineTo(px_per_div*i + spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+          }
         }
+        ctx.stroke();
       }
-      ctx.stroke();
 
       ctx.font = "30px Arial";
-      ctx.fillStyle = "black";
-      if (currentValues.length < max_size) {
-        ctx.fillText(currentValues[currentValues.length-1], 100, 100);
-      } else {
-        ctx.fillText(currentValues[((oldest - 1) % max_size + max_size) % max_size], 100, 100);
+      for (let i = 0; i < 4; ++i) {
+        ctx.fillStyle = colors[i];
+        if (kCurValues.length < max_size) {
+          ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
+        } else {
+          ctx.fillText(kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+        }
       }
 
       requestId = requestAnimationFrame(render);
@@ -340,7 +325,6 @@ function Plot() {
     render();
 
     return () => {
-      socket.off('newnumber0');
       cancelAnimationFrame(requestId);
     };
   }, []);
@@ -355,8 +339,8 @@ function Plot() {
 }
 
 function App() {
-  const [currentTime, setCurrentTime] = useState(0);
   const [fetched, setFetched] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     fetch('/defaults').then(res => res.json()).then(data => {
@@ -366,18 +350,37 @@ function App() {
     });
   }, [fetched]);
 
-  useEffect(() => {
+  function GetTime() {
+    console.log("called");
     fetch('/time').then(res => res.json()).then(data => {
       setCurrentTime(data.time);
     });
-  }, []);
+  };
 
   // Don't render anything until the defaults are fetched.
   return (
     fetched ?
       <div className="App">
-        <NavBar />
         <Router>
+          <Navbar bg="light">
+            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+            <Nav>
+              <Nav.Item>
+                <Nav.Link as={Link} to="/config" onClick={GetTime}>Config</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+              </Nav.Item>
+            </Nav>
+            <Nav className="ml-auto">
+              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+                <NavDropdown.Item href="#action/3.1">Action</NavDropdown.Item>
+                <NavDropdown.Item href="#action/3.2">Another action</NavDropdown.Item>
+                <NavDropdown.Item href="#action/3.3">Something</NavDropdown.Item>
+                <NavDropdown.Item href="#action/3.4">Separated link</NavDropdown.Item>
+              </NavDropdown>
+            </Nav>
+          </Navbar>
           <Switch>
             <Route exact path="/">
               <WebUI />
