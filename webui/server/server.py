@@ -3,6 +3,7 @@ import queue
 import serial
 import time
 
+from collections import OrderedDict
 from flask import Flask
 from flask_socketio import SocketIO, emit
 from random import normalvariate, randint
@@ -19,16 +20,91 @@ read_thread = Thread()
 write_thread = Thread()
 thread_stop_event = Event()
 
-cur_thresholds = [0, 0, 0, 0]
 # L, D, U, R
 sensor_numbers = [3, 2, 0, 1]
 
+
+class ProfileHandler(object):
+  def __init__(self, filename="profiles.txt"):
+    self.filename = filename
+    self.profiles = OrderedDict()
+    self.cur_profile = ""
+    # Have a default no-name profile we can use in case there are no profiles.
+    self.profiles[""] = [0, 0, 0, 0]
+    self.loaded = False
+
+  def MaybeLoad(self):
+    if not self.loaded:
+      with open(self.filename, "r") as f:
+        for line in f:
+          parts = line.split()
+          if len(parts) == 5:
+            if len(self.profiles) == 0:
+              self.cur_profile = parts[0]
+            self.profiles[parts[0]] = [int(x) for x in parts[1:]]
+      self.loaded = True
+      print("Found Profiles: " + str(list(self.profiles.keys())))
+
+  def GetCurThresholds(self):
+    if self.cur_profile in self.profiles:
+      return self.profiles[self.cur_profile]
+    else:
+      return [0, 0, 0, 0]
+
+  def UpdateThresholds(self, index, value):
+    if self.cur_profile in self.profiles:
+      self.profiles[self.cur_profile][index] = value
+      with open(self.filename, "w") as f:
+        for name, thresholds in self.profiles.items():
+          if name:
+            f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
+      socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
+
+  def ChangeProfile(self, profile_name):
+    if profile_name in self.profiles:
+      self.cur_profile = profile_name
+      socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
+      socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+
+  def GetProfileNames(self):
+    return [name for name in self.profiles.keys() if name]
+
+  def AddProfile(self, profile_name, thresholds):
+    self.profiles[profile_name] = thresholds
+    if self.cur_profile == "":
+      self.profiles[""] = [0, 0 ,0, 0]
+    self.ChangeProfile(profile_name)
+    with open(self.filename, "w") as f:
+      for name, thresholds in self.profiles.items():
+        if name:
+          f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
+    socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
+    socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+
+  def RemoveProfile(self, profile_name):
+    if profile_name in self.profiles:
+      del self.profiles[profile_name]
+      if profile_name == self.cur_profile:
+        self.ChangeProfile("")
+      with open(self.filename, "w") as f:
+        for name, thresholds in self.profiles.items():
+          if name:
+            f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
+      socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
+      socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
+      socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+
+  def GetCurrentProfile(self):
+    return self.cur_profile
+
+
 class SerialHandler(object):
-  def __init__(self, port="", timeout=1):
+  def __init__(self, profile_handler, port="", timeout=1):
     self.ser = None
     self.port = port
     self.timeout = timeout
     self.write_queue = queue.Queue(10)
+    self.profile_handler = profile_handler
 
   def ChangePort(self, port):
     if self.ser:
@@ -83,16 +159,21 @@ class SerialHandler(object):
       index, value = self.write_queue.get()
       # self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
 
-      global cur_thresholds
-      cur_thresholds[index] = value
-      print('Thresholds are: ' + str(cur_thresholds))
 
+      self.profile_handler.UpdateThresholds(index, value)
+      # Emit so other servers can live update the thresholds.
+      print('Thresholds are: ' + str(self.profile_handler.GetCurThresholds()))
 
-serial_handler = SerialHandler(port="")#/dev/tty/ACM0")
+profile_handler = ProfileHandler()
+serial_handler = SerialHandler(profile_handler, port="")#/dev/tty/ACM0")
 
 @app.route('/defaults')
 def get_defaults():
-  return {}
+  return {
+    'profiles': profile_handler.GetProfileNames(),
+    'cur_profile': profile_handler.GetCurrentProfile(),
+    'thresholds': profile_handler.GetCurThresholds()
+  }
 
 @app.route('/time')
 def get_current_time():
@@ -104,8 +185,7 @@ def connect():
   global read_thread
   global write_thread
   print('Client connected')
-  # TODO(teejusb): Fetch cur_thresholds from somewhere.
-  socketio.emit('thresholds', {'thresholds': cur_thresholds})
+  profile_handler.MaybeLoad()
 
   if not read_thread.isAlive():
     print("Starting Read Thread")
@@ -122,12 +202,22 @@ def disconnect():
 @socketio.on('update_threshold')
 def update_threshold(values, index):
   try:
+    # Let the writer thread handle updating thresholds.
     serial_handler.write_queue.put((index, values[index]), block=False)
   except queue.Full as e:
     logger.error("Could not update thresholds. Queue full.")
 
+@socketio.on('add_profile')
+def add_profile(profile_name, thresholds):
+  profile_handler.AddProfile(profile_name, thresholds)
+
+@socketio.on('remove_profile')
+def add_profile(profile_name):
+  profile_handler.RemoveProfile(profile_name)
+
+@socketio.on('change_profile')
+def add_profile(profile_name):
+  profile_handler.ChangeProfile(profile_name)
 
 if __name__ == "__main__":
-  # t = threading.Thread(target=generater.generate)
-  # t.start()
   socketio.run(app)

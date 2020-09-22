@@ -24,3 +24,5 @@ yarn-error.log*
 
 venv
 __pycache__
+
+server/profiles.txt

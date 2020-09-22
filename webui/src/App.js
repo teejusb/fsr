@@ -187,7 +187,9 @@ function Canvas(props) {
       // Threshold Label
       const thresholdLabel = thresholdLabelRef.current;
       thresholdLabel.innerHTML = kCurThresholds[index];
-      ctx.font = "30px Arial";
+      // This is default React CSS font style.
+      const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
+      ctx.font = "30px " + bodyFontFamily;
       ctx.fillStyle = "black";
       if (kCurThresholds[index] > 990) {
         ctx.textBaseline = 'top';
@@ -202,10 +204,9 @@ function Canvas(props) {
     render();
 
     return () => {
-      socket.off('newnumber' + index);
       cancelAnimationFrame(requestId);
     };
-  }, [index]);
+  }, []);
 
   return(
     <Col style={{height: '75vh', paddingTop: '1vh'}}>
@@ -341,21 +342,53 @@ function Plot() {
 function App() {
   const [fetched, setFetched] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [profiles, setProfiles] = useState([]);
+  const [activeProfile, setActiveProfile] = useState('');
 
   useEffect(() => {
-    fetch('/defaults').then(res => res.json()).then(data => {
-      if (!fetched) {
-        setFetched(true);
-      }
-    });
+    if (!fetched) {
+      fetch('/defaults').then(res => res.json()).then(data => {
+          setProfiles(data.profiles);
+          kCurThresholds = data.thresholds;
+          setFetched(true);
+          socket.on('get_profiles', function(msg) {
+            setProfiles(msg.profiles);
+          });
+          socket.on('get_cur_profiles', function(msg) {
+            setActiveProfile(msg.cur_profile);
+          });
+      });
+    }
+
+    return () => {
+      socket.off('get_profiles');
+    };
   }, [fetched]);
 
   function GetTime() {
-    console.log("called");
     fetch('/time').then(res => res.json()).then(data => {
       setCurrentTime(data.time);
     });
   };
+
+  function AddProfile(e) {
+    // On enter key.
+    if (e.keyCode === 13) {
+      socket.emit('add_profile', e.target.value, kCurThresholds);
+      e.target.value = "";
+    }
+    return false;
+  }
+
+  function RemoveProfile(e) {
+    const profile_name = e.target.parentNode.innerText.replace('X ', '');
+    socket.emit('remove_profile', profile_name);
+  }
+
+  function ChangeProfile(e) {
+    const profile_name = e.target.innerText.replace('X ', '');
+    socket.emit('change_profile', profile_name);
+  }
 
   // Don't render anything until the defaults are fetched.
   return (
@@ -374,10 +407,25 @@ function App() {
             </Nav>
             <Nav className="ml-auto">
               <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-                <NavDropdown.Item href="#action/3.1">Action</NavDropdown.Item>
-                <NavDropdown.Item href="#action/3.2">Another action</NavDropdown.Item>
-                <NavDropdown.Item href="#action/3.3">Something</NavDropdown.Item>
-                <NavDropdown.Item href="#action/3.4">Separated link</NavDropdown.Item>
+                {profiles.map(function(profile) {
+                  if (profile === activeProfile) {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}} onClick={ChangeProfile} active>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  } else {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}} onClick={ChangeProfile}>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  }
+                })}
+                <NavDropdown.Divider />
+                <Form inline onSubmit={(e) => e.preventDefault()}>
+                  <Form.Control onKeyDown={AddProfile} style={{marginLeft: "0.5rem", marginRight: "0.5rem"}} type="text" placeholder="New Profile" />
+                </Form>
               </NavDropdown>
             </Nav>
           </Navbar>
@@ -388,7 +436,7 @@ function App() {
             <Route path="/config">
               <header className="App-header">
                 <p>The current time is {currentTime}.</p>
-              </header>
+              </header> 
             </Route>
             <Route path="/plot">
               <Plot />
