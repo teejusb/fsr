@@ -194,7 +194,7 @@ function ValueMonitor(props) {
       const threshold_height = 3
       const threshold_pos = (1023-kCurThresholds[index])/1023 * canvas.height;
       ctx.fillStyle = "black";
-      ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2),  canvas.width, threshold_height);
+      ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2), canvas.width, threshold_height);
 
       // Threshold Label
       const thresholdLabel = thresholdLabelRef.current;
@@ -235,8 +235,7 @@ function ValueMonitor(props) {
       <Form.Label ref={valueLabelRef}>0</Form.Label>
       <canvas
         ref={canvasRef}
-        style={{border: '1px solid white', width: '100%', height: '100%'}}
-      />
+        style={{border: '1px solid white', width: '100%', height: '100%'}} />
     </Col>
   );
 }
@@ -309,7 +308,8 @@ function Plot() {
       const minor_division = 100;
       for (let i = 1; i*minor_division < 1023; ++i) {
         const pattern = i % 2 === 0 ? [20, 5] : [5, 10];
-        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
+        drawDashedLine(ctx, pattern, spacing,
+          box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
       }
 
       const colors = ['red', 'orange', 'green', 'blue'];
@@ -333,9 +333,11 @@ function Plot() {
         for (let i = 0; i < max_size; ++i) {
           if (i === kCurValues.length) { break; }
           if (i === 0) {
-            ctx.moveTo(spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+            ctx.moveTo(spacing,
+              box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
           } else {
-            ctx.lineTo(px_per_div*i + spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+            ctx.lineTo(px_per_div*i + spacing,
+              box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
           }
         }
         ctx.stroke();
@@ -350,7 +352,8 @@ function Plot() {
         if (kCurValues.length < max_size) {
           ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
         } else {
-          ctx.fillText(kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+          ctx.fillText(
+            kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
         }
       }
 
@@ -368,8 +371,7 @@ function Plot() {
     <header className="App-header">
       <canvas
         ref={canvasRef}
-        style={{border: '1px solid white', width: '100%', height: '100%'}}
-      />
+        style={{border: '1px solid white', width: '100%', height: '100%'}} />
     </header>
   );
 }
@@ -441,13 +443,15 @@ function App() {
                 {profiles.map(function(profile) {
                   if (profile === activeProfile) {
                     return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}} onClick={ChangeProfile} active>
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile} active>
                         <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
                       </NavDropdown.Item>
                     );
                   } else {
                     return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}} onClick={ChangeProfile}>
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile}>
                         <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
                       </NavDropdown.Item>
                     );
@@ -455,7 +459,11 @@ function App() {
                 })}
                 <NavDropdown.Divider />
                 <Form inline onSubmit={(e) => e.preventDefault()}>
-                  <Form.Control onKeyDown={AddProfile} style={{marginLeft: "0.5rem", marginRight: "0.5rem"}} type="text" placeholder="New Profile" />
+                  <Form.Control
+                      onKeyDown={AddProfile}
+                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                      type="text"
+                      placeholder="New Profile" />
                 </Form>
               </NavDropdown>
             </Nav>

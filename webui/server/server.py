@@ -59,7 +59,10 @@ class ProfileHandler(object):
     if self.cur_profile in self.profiles:
       return self.profiles[self.cur_profile]
     else:
-      return [0, 0, 0, 0]
+      # Should never get here assuming cur_profile is always appropriately
+      # updated, but you never know.
+      self.ChangeProfile("")
+      return self.profiles[self.cur_profile]
 
   def UpdateThresholds(self, index, value):
     if self.cur_profile in self.profiles:
@@ -75,8 +78,10 @@ class ProfileHandler(object):
     if profile_name in self.profiles:
       self.cur_profile = profile_name
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
-      socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
-      print('Changed to profile "{}" with thresholds: {}'.format(self.GetCurrentProfile(), str(self.GetCurThresholds())))
+      socketio.emit('get_cur_profiles',
+                    {'cur_profile': self.GetCurrentProfile()})
+      print('Changed to profile "{}" with thresholds: {}'.format(
+        self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
   def GetProfileNames(self):
     return [name for name in self.profiles.keys() if name]
@@ -92,7 +97,8 @@ class ProfileHandler(object):
           f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
     socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
     socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
-    print('Added profile "{}" with thresholds: {}'.format(self.GetCurrentProfile(), str(self.GetCurThresholds())))
+    print('Added profile "{}" with thresholds: {}'.format(
+      self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
   def RemoveProfile(self, profile_name):
     if profile_name in self.profiles:
@@ -105,8 +111,10 @@ class ProfileHandler(object):
             f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
       socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
-      socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
-      print('Removed profile "{}". Current thresholds are: {}'.format(profile_name, str(self.GetCurThresholds())))
+      socketio.emit('get_cur_profiles',
+                    {'cur_profile': self.GetCurrentProfile()})
+      print('Removed profile "{}". Current thresholds are: {}'.format(
+        profile_name, str(self.GetCurThresholds())))
 
   def GetCurrentProfile(self):
     return self.cur_profile
@@ -119,10 +127,11 @@ class SerialHandler(object):
   Attributes:
     ser: Serial, the serial object opened by this class.
     port: string, the path/name of the serial object to open.
-    timeout: int, the time in seconds indicating the timeout for serial operations.
+    timeout: int, the time in seconds indicating the timeout for serial
+      operations.
     write_queue: Queue, a queue object read by the writer thread
-    profile_handler: ProfileHandler, the global profile_handler used to update the
-      thresholds
+    profile_handler: ProfileHandler, the global profile_handler used to update
+      the thresholds
   """
   def __init__(self, profile_handler, port="", timeout=1):
     self.ser = None
