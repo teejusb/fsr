@@ -309,20 +309,31 @@ function Plot() {
       const minor_division = 100;
       for (let i = 1; i*minor_division < 1023; ++i) {
         const pattern = i % 2 === 0 ? [20, 5] : [5, 10];
-        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*minor_division)/1023), box_width + spacing);
+        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
+      }
+
+      const colors = ['red', 'orange', 'green', 'blue'];
+
+      // Display the current thresholds.
+      for (let i = 0; i < 4; ++i) {
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = colors[i];
+        ctx.lineWidth = 2;
+        ctx.moveTo(spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
+        ctx.lineTo(box_width + spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
+        ctx.stroke();
       }
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/max_size;
-      const colors = ['red', 'orange', 'green', 'blue'];
       for (let j = 0; j < 4; ++j) {
         ctx.beginPath();
-        ctx.setLineDash([]);
         ctx.strokeStyle = colors[j];
         for (let i = 0; i < max_size; ++i) {
           if (i === kCurValues.length) { break; }
           if (i === 0) {
-            ctx.moveTo(px_per_div*i + spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+            ctx.moveTo(spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
           } else {
             ctx.lineTo(px_per_div*i + spacing, box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
           }
@@ -363,7 +374,6 @@ function Plot() {
 
 function App() {
   const [fetched, setFetched] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState('');
 
