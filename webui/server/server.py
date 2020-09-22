@@ -25,6 +25,16 @@ sensor_numbers = [3, 2, 0, 1]
 
 
 class ProfileHandler(object):
+  """
+  A class to handle all the profile modifications.
+
+  Attributes:
+    filename: string, the filename where to read/write profile data.
+    profiles: OrderedDict, the profile data loaded from the file.
+    cur_profile: string, the name of the current active profile.
+    loaded: bool, whether or not the backend has already loaded the
+      profile data file or not.
+  """
   def __init__(self, filename="profiles.txt"):
     self.filename = filename
     self.profiles = OrderedDict()
@@ -99,6 +109,17 @@ class ProfileHandler(object):
 
 
 class SerialHandler(object):
+  """
+  A class to handle all the serial interactions.
+
+  Attributes:
+    ser: Serial, the serial object opened by this class.
+    port: string, the path/name of the serial object to open.
+    timeout: int, the time in seconds indicating the timeout for serial operations.
+    write_queue: Queue, a queue object read by the writer thread
+    profile_handler: ProfileHandler, the global profile_handler used to update the
+      thresholds
+  """
   def __init__(self, profile_handler, port="", timeout=1):
     self.ser = None
     self.port = port
@@ -159,7 +180,6 @@ class SerialHandler(object):
       index, value = self.write_queue.get()
       # self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
 
-
       self.profile_handler.UpdateThresholds(index, value)
       # Emit so other servers can live update the thresholds.
       print('Thresholds are: ' + str(self.profile_handler.GetCurThresholds()))
@@ -174,10 +194,6 @@ def get_defaults():
     'cur_profile': profile_handler.GetCurrentProfile(),
     'thresholds': profile_handler.GetCurThresholds()
   }
-
-@app.route('/time')
-def get_current_time():
-  return {'time': time.time()}
 
 
 @socketio.on('connect')

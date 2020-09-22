@@ -24,11 +24,18 @@ import {
 
 const socket = io("127.0.0.1:5000");
 
+// Keep track of the current thresholds fetched from the backend.
+// Make it global since it's used by many components.
 let kCurThresholds = [0, 0, 0, 0];
+
+// A history of the past 'max_size' values fetched from the backend.
+// Used for plotting and displaying live values.
+// We use a cyclical array to save memory.
 let kCurValues = [[0, 0, 0, 0]]
 const max_size = 1000;
 let oldest = 0;
 
+// Add the appropriate socket handlers for the above two globals.
 socket.on('get_values', function(msg) {
   if (kCurValues.length < max_size) {
     kCurValues.push(msg.values);
@@ -42,15 +49,17 @@ socket.on('thresholds', function(msg) {
   kCurThresholds = msg.thresholds;
 });
 
-function Canvas(props) {
+// An interactive display of the current values obtained by the backend.
+// Also has functionality to manipulate thresholds.
+function ValueMonitor(props) {
   const index = parseInt(props.index)
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
 
   function EmitValue(val) {
-    // Send back all the thresholds, in case the server restarts it would be
-    // nicer to have all the values in sync.
+    // Send back all the thresholds instead of a single value per sensor. This is in case
+    // the server restarts where it would be nicer to have all the values in sync.
     // Still send back the index since we want to update only one value at a time
     // to the microcontroller.
     socket.emit('update_threshold', kCurThresholds, index);
@@ -63,6 +72,7 @@ function Canvas(props) {
       EmitValue(val);
     }
   }
+
   function Increment(e) {
     const val = kCurThresholds[index] + 1;
     if (val <= 1023) {
@@ -76,7 +86,6 @@ function Canvas(props) {
 
     const canvas = canvasRef.current;
 
-    // Change thresholds on drag.
     function getMousePos(canvas, e) {
       const rect = canvas.getBoundingClientRect();
       return {
@@ -84,6 +93,7 @@ function Canvas(props) {
         y: e.clientY - rect.top
       };
     }
+    // Change the thresholds while dragging, but only emit on release.
     let is_drag = false;
 
     // Mouse Events
@@ -145,6 +155,8 @@ function Canvas(props) {
       canvas.setAttribute('height', style.height() * dpi);
       // **********************************
 
+      // Get the latest value. This is either last element in the list, or based off of
+      // the circular array.
       let currentValue = 0;
       if (kCurValues.length < max_size) {
         currentValue = kCurValues[kCurValues.length-1][index];
@@ -178,7 +190,7 @@ function Canvas(props) {
       ctx.fillStyle = grd;
       ctx.fillRect(canvas.width/4, position, canvas.width/2, canvas.height);
 
-      // Threshold
+      // Threshold Line
       const threshold_height = 3
       const threshold_pos = (1023-kCurThresholds[index])/1023 * canvas.height;
       ctx.fillStyle = "black";
@@ -206,6 +218,10 @@ function Canvas(props) {
     return () => {
       cancelAnimationFrame(requestId);
     };
+  // Intentionally disable the lint errors.
+  // EmitValue and index don't need to be in the dependency list as we only want this to 
+  // run once. The canvas will automatically update via requestAnimationFrame.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return(
@@ -230,10 +246,10 @@ function WebUI() {
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          <Canvas index="0"/>
-          <Canvas index="1"/>
-          <Canvas index="2"/>
-          <Canvas index="3"/>
+          <ValueMonitor index="0"/>
+          <ValueMonitor index="1"/>
+          <ValueMonitor index="2"/>
+          <ValueMonitor index="3"/>
         </Row>
       </Container>
     </header>
@@ -272,6 +288,7 @@ function Plot() {
       ctx.fillStyle = grd;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Border
       const spacing = 10;
       const box_width = canvas.width-spacing*2;
       const box_height = canvas.height-spacing*2
@@ -287,12 +304,15 @@ function Plot() {
         ctx.stroke();
       }
 
-      const main_division = 100;
-      for (let i = 1; i*main_division < 1023; ++i) {
+      // Draw the divisions in the plot.
+      // Major Divisions will be 2 x minor_divison.
+      const minor_division = 100;
+      for (let i = 1; i*minor_division < 1023; ++i) {
         const pattern = i % 2 === 0 ? [20, 5] : [5, 10];
-        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*main_division)/1023), box_width + spacing);
+        drawDashedLine(ctx, pattern, spacing, box_height-(box_height * (i*minor_division)/1023), box_width + spacing);
       }
 
+      // Plot the line graph for each of the sensors.
       const px_per_div = box_width/max_size;
       const colors = ['red', 'orange', 'green', 'blue'];
       for (let j = 0; j < 4; ++j) {
@@ -310,6 +330,7 @@ function Plot() {
         ctx.stroke();
       }
 
+      // Display the current value for each of the sensors.
       ctx.font = "30px Arial";
       for (let i = 0; i < 4; ++i) {
         ctx.fillStyle = colors[i];
@@ -329,6 +350,7 @@ function Plot() {
       cancelAnimationFrame(requestId);
     };
   }, []);
+
   return (
     <header className="App-header">
       <canvas
@@ -346,9 +368,12 @@ function App() {
   const [activeProfile, setActiveProfile] = useState('');
 
   useEffect(() => {
+    // Fetch all the default values the first time we load the page.
+    // We will re-render after everything is fetched.
     if (!fetched) {
       fetch('/defaults').then(res => res.json()).then(data => {
           setProfiles(data.profiles);
+          setActiveProfile(data.cur_profile);
           kCurThresholds = data.thresholds;
           setFetched(true);
           socket.on('get_profiles', function(msg) {
@@ -365,27 +390,24 @@ function App() {
     };
   }, [fetched]);
 
-  function GetTime() {
-    fetch('/time').then(res => res.json()).then(data => {
-      setCurrentTime(data.time);
-    });
-  };
-
   function AddProfile(e) {
-    // On enter key.
+    // Only add a profile on the enter key.
     if (e.keyCode === 13) {
       socket.emit('add_profile', e.target.value, kCurThresholds);
+      // Reset the text box.
       e.target.value = "";
     }
     return false;
   }
 
   function RemoveProfile(e) {
+    // Strip out the "X " added by the button.
     const profile_name = e.target.parentNode.innerText.replace('X ', '');
     socket.emit('remove_profile', profile_name);
   }
 
   function ChangeProfile(e) {
+    // Strip out the "X " added by the button.
     const profile_name = e.target.innerText.replace('X ', '');
     socket.emit('change_profile', profile_name);
   }
@@ -398,9 +420,6 @@ function App() {
           <Navbar bg="light">
             <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
             <Nav>
-              <Nav.Item>
-                <Nav.Link as={Link} to="/config" onClick={GetTime}>Config</Nav.Link>
-              </Nav.Item>
               <Nav.Item>
                 <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
               </Nav.Item>
@@ -432,11 +451,6 @@ function App() {
           <Switch>
             <Route exact path="/">
               <WebUI />
-            </Route>
-            <Route path="/config">
-              <header className="App-header">
-                <p>The current time is {currentTime}.</p>
-              </header> 
             </Route>
             <Route path="/plot">
               <Plot />
