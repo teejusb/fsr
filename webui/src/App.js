@@ -389,18 +389,19 @@ function App() {
           setProfiles(data.profiles);
           setActiveProfile(data.cur_profile);
           kCurThresholds = data.thresholds;
-          setFetched(true);
           socket.on('get_profiles', function(msg) {
             setProfiles(msg.profiles);
           });
           socket.on('get_cur_profiles', function(msg) {
             setActiveProfile(msg.cur_profile);
           });
+          setFetched(true);
       });
     }
 
     return () => {
       socket.off('get_profiles');
+      socket.off('get_cur_profiles');
     };
   }, [fetched]);
 
