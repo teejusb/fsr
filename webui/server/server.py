@@ -9,7 +9,7 @@ from flask_socketio import SocketIO, emit
 from random import normalvariate, randint
 from threading import Thread, Event
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../build', static_url_path='/')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
@@ -69,12 +69,14 @@ class ProfileHandler(object):
           if name:
             f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
+      print('Thresholds are: ' + str(self.GetCurThresholds()))
 
   def ChangeProfile(self, profile_name):
     if profile_name in self.profiles:
       self.cur_profile = profile_name
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
       socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+      print('Changed to profile "{}" with thresholds: {}'.format(self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
   def GetProfileNames(self):
     return [name for name in self.profiles.keys() if name]
@@ -90,6 +92,7 @@ class ProfileHandler(object):
           f.write(name + " " + " ".join(map(str, thresholds)) + "\n")
     socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
     socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+    print('Added profile "{}" with thresholds: {}'.format(self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
   def RemoveProfile(self, profile_name):
     if profile_name in self.profiles:
@@ -103,6 +106,7 @@ class ProfileHandler(object):
       socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
       socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
+      print('Removed profile "{}". Current thresholds are: {}'.format(profile_name, str(self.GetCurThresholds())))
 
   def GetCurrentProfile(self):
     return self.cur_profile
@@ -181,8 +185,6 @@ class SerialHandler(object):
       # self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
 
       self.profile_handler.UpdateThresholds(index, value)
-      # Emit so other servers can live update the thresholds.
-      print('Thresholds are: ' + str(self.profile_handler.GetCurThresholds()))
 
 profile_handler = ProfileHandler()
 serial_handler = SerialHandler(profile_handler, port="")#/dev/tty/ACM0")
@@ -194,6 +196,10 @@ def get_defaults():
     'cur_profile': profile_handler.GetCurrentProfile(),
     'thresholds': profile_handler.GetCurThresholds()
   }
+
+@app.route('/')
+def index():
+  return app.send_static_file('index.html')
 
 
 @socketio.on('connect')

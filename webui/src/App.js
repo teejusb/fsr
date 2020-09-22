@@ -342,7 +342,9 @@ function Plot() {
       }
 
       // Display the current value for each of the sensors.
-      ctx.font = "30px Arial";
+      // This is default React CSS font style.
+      const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
+      ctx.font = "30px " + bodyFontFamily;
       for (let i = 0; i < 4; ++i) {
         ctx.fillStyle = colors[i];
         if (kCurValues.length < max_size) {
