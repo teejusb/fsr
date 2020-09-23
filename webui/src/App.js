@@ -22,7 +22,7 @@ import {
   Link
 } from "react-router-dom";
 
-const socket = io("127.0.0.1:5000");
+const socket = io("192.168.1.188:5000", {transport: ["websocket"]});
 
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
@@ -88,9 +88,19 @@ function ValueMonitor(props) {
 
     function getMousePos(canvas, e) {
       const rect = canvas.getBoundingClientRect();
+      const dpi = window.devicePixelRatio || 1;
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: (e.clientX - rect.left) * dpi,
+        y: (e.clientY - rect.top) * dpi
+      };
+    }
+
+    function getTouchPos(canvas, e) {
+      const rect = canvas.getBoundingClientRect();
+      const dpi = window.devicePixelRatio || 1;
+      return {
+        x: (e.targetTouches[0].pageX - rect.left - window.pageXOffset) * dpi,
+        y: (e.targetTouches[0].pageY - rect.top - window.pageYOffset) * dpi
       };
     }
     // Change the thresholds while dragging, but only emit on release.
@@ -104,8 +114,6 @@ function ValueMonitor(props) {
     });
 
     canvas.addEventListener('mouseup', function(e) {
-      let pos = getMousePos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       EmitValue(kCurThresholds[index]);
       is_drag = false;
     });
@@ -119,21 +127,20 @@ function ValueMonitor(props) {
 
     // Touch Events
     canvas.addEventListener('touchstart', function(e) {
-      let pos = getMousePos(canvas, e);
+      let pos = getTouchPos(canvas, e);
       kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       is_drag = true;
     });
 
     canvas.addEventListener('touchend', function(e) {
-      let pos = getMousePos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+      // We don't need to get the 
       EmitValue(kCurThresholds[index]);
       is_drag = false;
     });
 
     canvas.addEventListener('touchmove', function(e) {
       if (is_drag) {
-        let pos = getMousePos(canvas, e);
+        let pos = getTouchPos(canvas, e);
         kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       }
     });
@@ -142,7 +149,7 @@ function ValueMonitor(props) {
       // ********** Canvas setup **********
       // This has to be here in case the user resizes the window.
       // Adjust DPI so that all the edges are smooth during scaling.
-      const dpi = window.devicePixelRatio;
+      const dpi = window.devicePixelRatio || 1;
       const style = {
         height() {
           return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
@@ -226,16 +233,16 @@ function ValueMonitor(props) {
 
   return(
     <Col style={{height: '75vh', paddingTop: '1vh'}}>
-      <Button variant="light" size="md" onClick={Decrement}><b>-</b></Button>
+      <Button variant="light" size="sm" onClick={Decrement}><b>-</b></Button>
       <span> </span>
-      <Button variant="light" size="md" onClick={Increment}><b>+</b></Button>
+      <Button variant="light" size="sm" onClick={Increment}><b>+</b></Button>
       <br />
       <Form.Label ref={thresholdLabelRef}>0</Form.Label>
       <br />
       <Form.Label ref={valueLabelRef}>0</Form.Label>
       <canvas
         ref={canvasRef}
-        style={{border: '1px solid white', width: '100%', height: '100%'}} />
+        style={{border: '1px solid white', width: '100%', height: '100%', touchAction: "none"}} />
     </Col>
   );
 }

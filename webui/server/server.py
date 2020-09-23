@@ -217,6 +217,8 @@ def connect():
   global write_thread
   print('Client connected')
   profile_handler.MaybeLoad()
+  socketio.emit('thresholds',
+    {'thresholds': profile_handler.GetCurThresholds()})
 
   if not read_thread.isAlive():
     print("Starting Read Thread")
@@ -251,4 +253,4 @@ def add_profile(profile_name):
   profile_handler.ChangeProfile(profile_name)
 
 if __name__ == "__main__":
-  socketio.run(app)
+  socketio.run(app, host='0.0.0.0')
