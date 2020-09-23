@@ -1,6 +1,7 @@
 import logging
 import queue
 import serial
+import socket
 import time
 
 from collections import OrderedDict
@@ -22,6 +23,10 @@ thread_stop_event = Event()
 
 # L, D, U, R
 sensor_numbers = [3, 2, 0, 1]
+
+hostname = socket.gethostname()
+ip_address = socket.gethostbyname(hostname)
+print(" * WebUI can be found at: http://" + ip_address + ":5000")
 
 
 class ProfileHandler(object):
@@ -253,4 +258,7 @@ def add_profile(profile_name):
   profile_handler.ChangeProfile(profile_name)
 
 if __name__ == "__main__":
-  socketio.run(app, host='0.0.0.0')
+  hostname = socket.gethostname()
+  ip_address = socket.gethostbyname(hostname)
+  print(" * WebUI can be found at: http://" + ip_address + ":5000")
+  socketio.run(app, host='0.0.0.0', port=str(port))

@@ -22,7 +22,7 @@ import {
   Link
 } from "react-router-dom";
 
-const socket = io("192.168.1.188:5000", {transport: ["websocket"]});
+const socket = io({transport: ["websocket"]});
 
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
