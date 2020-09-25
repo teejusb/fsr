@@ -67,8 +67,6 @@ class HullMovingAverage {
 /*===========================================================================*/
 
 // Class containing all relevant information per sensor.
-// TODO(teejusb): Support re-initialization from stored threshold values,
-//   likely via a server so we don't have to stress the EEPROM.
 class SensorState {
  public:
   SensorState(unsigned int pin_value) :
@@ -188,7 +186,7 @@ class SerialProcessor {
     if (bytes_read < 2 || bytes_read > 5) { return; }
 
     size_t sensor_index = buffer_[0] - '0';
-    if (sensor_index < 0 || sensor_index > kNumSensors) { return; }
+    if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
 
     kSensorStates[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
