@@ -67,12 +67,14 @@ class HullMovingAverage {
 /*===========================================================================*/
 
 // Class containing all relevant information per sensor.
+// TODO(teejusb): Support re-initialization from stored threshold values,
+//   likely via a server so we don't have to stress the EEPROM.
 class SensorState {
  public:
-  SensorState(unsigned int pin_value, unsigned int offset) :
+  SensorState(unsigned int pin_value) :
       pin_value_(pin_value), state_(SensorState::OFF),
       user_threshold_(kDefaultThreshold), moving_average_(kWindowSize),
-      offset_(offset) {}
+      offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
   void EvaluateSensor(int joystick_num) {
@@ -98,7 +100,13 @@ class SensorState {
     user_threshold_ = new_threshold;
   }
 
-  // TODO(teejusb): Add an UpdateOffset function.
+  unsigned int UpdateOffset() {
+    // Update the offset with the last read value. UpdateOffset should be
+    // called with no applied pressure on the panels so that it will be
+    // calibrated correctly.
+    offset_ = cur_value_;
+    return offset_;
+  }
 
   int GetCurValue() {
     return cur_value_;
@@ -134,12 +142,12 @@ class SensorState {
 
 // Defines the sensor collections and sets the pins for them appropriately.
 // NOTE(teejusb): These may need to be changed depending on the pins users
-// connect their FSRs to, and the rest values they have.
+// connect their FSRs to.
 SensorState kSensorStates[] = {
-  SensorState(A0, 8),
-  SensorState(A1, 106),
-  SensorState(A2, 44),
-  SensorState(A3, 39),
+  SensorState(A0),
+  SensorState(A1),
+  SensorState(A2),
+  SensorState(A3),
 };
 const size_t kNumSensors = sizeof(kSensorStates)/sizeof(SensorState);
 
@@ -156,8 +164,18 @@ class SerialProcessor {
       size_t bytes_read = Serial.readBytesUntil(
           '\n', buffer_, kBufferSize - 1);
       buffer_[bytes_read] = '\0';
-      
-      UpdateThreshold(bytes_read);
+
+      if (bytes_read == 0) { return; }
+ 
+      switch(buffer_[0]) {
+        case 'o':
+        case 'O':
+          UpdateOffsets();
+          break;
+        default:
+          UpdateThreshold(bytes_read);
+          break;
+      }
     }  
   }
 
@@ -170,13 +188,17 @@ class SerialProcessor {
     if (bytes_read < 2 || bytes_read > 5) { return; }
 
     size_t sensor_index = buffer_[0] - '0';
-    if (sensor_index < 0 || sensor_index > 3) { return; }
+    if (sensor_index < 0 || sensor_index > kNumSensors) { return; }
 
     kSensorStates[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
   }
 
-  // TODO(teejusb): Add an UpdateOffset function
+  void UpdateOffsets() {
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      kSensorStates[i].UpdateOffset();
+    }
+  }
 
  private:
    static const size_t kBufferSize = 64;
@@ -198,7 +220,12 @@ void loop() {
     kSerialProcessor.CheckAndMaybeProcessData();
   }
 
+
+  Serial.write("1023");
   for (size_t i = 0; i < kNumSensors; ++i) {
     kSensorStates[i].EvaluateSensor(i + 1);
+    Serial.write(" ");
+    Serial.write(kSensorStates[i].GetCurValue());
   }
+  Serial.write("\n");
 }
