@@ -167,41 +167,49 @@ class SerialHandler(object):
       logger.exception("Error opening serial: %s", e)
 
   def Read(self):
-    print("Making random numbers")
+    # print("Making random numbers")
     numbers = [randint(0, 1023) for _ in range(4)]
     while not thread_stop_event.isSet():
-      offsets = [int(normalvariate(0, 5)) for _ in range(4)]
-      numbers = [max(0, min(numbers[i] + offsets[i], 1023)) for i in range(4)]
-      socketio.emit('get_values', {'values': numbers})
-      socketio.sleep(0.01)
-      # if not self.ser:
-      #   self.Open()
-      # try:
-      #   # This will block the thread until it gets a newline
-      #   line = self.ser.readline()
-      #   values = line.split()[1:]
-      #   # We're printing Up, Right, Down, Left
-      #   if len(values) == 4:
-      #     for i, value in enumerate(values) :
-      #       socketio.emit('newnumber' + sensor_numbers[i], {'value': value})
-      # except serial.SerialException as e:
-      #   logger.error("Error reading data: ", e)
-      #   self.Open()
+      # offsets = [int(normalvariate(0, 5)) for _ in range(4)]
+      # numbers = [max(0, min(numbers[i] + offsets[i], 1023)) for i in range(4)]
+      # socketio.emit('get_values', {'values': numbers})
+      # socketio.sleep(0.01)
+      if not self.ser:
+        self.Open()
+        # Still not open, retry loop.
+        if not self.ser:
+          continue
+
+      try:
+        # This will block the thread until it gets a newline
+        line = self.ser.readline()
+        values = line.split()[1:]
+        # We're printing Up, Right, Down, Left
+        if len(values) == 4:
+          for i, value in enumerate(values) :
+            socketio.emit('newnumber' + sensor_numbers[i], {'value': value})
+      except serial.SerialException as e:
+        logger.error("Error reading data: ", e)
+        self.Open()
 
   def Write(self):
     while not thread_stop_event.isSet():
-      # if not self.ser:
-      #   # Just wait until the reader opens the serial port.
-      #   time.sleep(1)
-      #   continue
+      if not self.ser:
+        # Just wait until the reader opens the serial port.
+        time.sleep(1)
+        continue
 
       index, value = self.write_queue.get()
-      # self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
-
-      self.profile_handler.UpdateThresholds(index, value)
+      try:
+        self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
+        self.profile_handler.UpdateThresholds(index, value)
+      except serial.SerialException as e:
+        logger.error("Error writing data: ", e)
+        # Emit current thresholds since we couldn't update the values.
+        socketio.emit('thresholds', {'thresholds': self.profile_handler.GetCurThresholds()})
 
 profile_handler = ProfileHandler()
-serial_handler = SerialHandler(profile_handler, port="")#/dev/tty/ACM0")
+serial_handler = SerialHandler(profile_handler, port="/dev/tty/ACM0")
 
 @app.route('/defaults')
 def get_defaults():
