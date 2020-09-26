@@ -183,11 +183,15 @@ class SerialHandler(object):
       try:
         # This will block the thread until it gets a newline
         line = self.ser.readline()
-        values = line.split()[1:]
-        # We're printing Up, Right, Down, Left
-        if len(values) == 4:
-          for i, value in enumerate(values) :
-            socketio.emit('newnumber' + sensor_numbers[i], {'value': value})
+        values = [int(x) for x in line.split()[1:]]
+
+        if len(values) != 4:
+          continue
+        # We're printing Up, Right, Down, Left. Fix it.
+        actual = []
+        for i in range(4):
+          actual.append(values[sensor_numbers[i]])
+        socketio.emit('get_values', {'values': actual})
       except serial.SerialException as e:
         logger.error("Error reading data: ", e)
         self.Open()
@@ -201,7 +205,7 @@ class SerialHandler(object):
 
       index, value = self.write_queue.get()
       try:
-        self.ser.write(str(sensor_numbers[index]) + str(value) + "\n")
+        self.ser.write((str(sensor_numbers[index]) + str(value) + "\n").encode())
         self.profile_handler.UpdateThresholds(index, value)
       except serial.SerialException as e:
         logger.error("Error writing data: ", e)
@@ -209,7 +213,7 @@ class SerialHandler(object):
         socketio.emit('thresholds', {'thresholds': self.profile_handler.GetCurThresholds()})
 
 profile_handler = ProfileHandler()
-serial_handler = SerialHandler(profile_handler, port="/dev/tty/ACM0")
+serial_handler = SerialHandler(profile_handler, port="/dev/ttyACM0")
 
 @app.route('/defaults')
 def get_defaults():

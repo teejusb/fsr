@@ -222,8 +222,8 @@ void loop() {
   Serial.write("1023");
   for (size_t i = 0; i < kNumSensors; ++i) {
     kSensorStates[i].EvaluateSensor(i + 1);
-    Serial.write(" ");
-    Serial.write(kSensorStates[i].GetCurValue());
+    Serial.print(" ");
+    Serial.print(kSensorStates[i].GetCurValue());
   }
-  Serial.write("\n");
+  Serial.print("\n");
 }
