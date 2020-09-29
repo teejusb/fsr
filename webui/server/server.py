@@ -50,13 +50,17 @@ class ProfileHandler(object):
 
   def MaybeLoad(self):
     if not self.loaded:
+      num_profiles = 0
       with open(self.filename, "r") as f:
         for line in f:
           parts = line.split()
           if len(parts) == 5:
-            if len(self.profiles) == 0:
-              self.cur_profile = parts[0]
             self.profiles[parts[0]] = [int(x) for x in parts[1:]]
+            num_profiles += 1
+            # Change to the first profile found.
+            # This will also emit the thresholds.
+            if num_profiles == 1:
+              self.ChangeProfile(parts[0])
       self.loaded = True
       print("Found Profiles: " + str(list(self.profiles.keys())))
 
