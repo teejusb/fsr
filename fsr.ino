@@ -202,6 +202,7 @@ class SerialProcessor {
 
     kSensorStates[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
+    PrintThresholds();
   }
 
   void UpdateOffsets() {

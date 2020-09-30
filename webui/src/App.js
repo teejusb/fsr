@@ -32,7 +32,7 @@ let kCurThresholds = [0, 0, 0, 0];
 // Used for plotting and displaying live values.
 // We use a cyclical array to save memory.
 let kCurValues = [[0, 0, 0, 0]]
-const max_size = 10000;
+const max_size = 1000;
 let oldest = 0;
 
 // Add the appropriate socket handlers for the above two globals.
