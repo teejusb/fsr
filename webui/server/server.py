@@ -165,19 +165,27 @@ class SerialHandler(object):
       self.ser = None
 
     try:
-      self.ser = serial.Serial(self.port, 9600, timeout=self.timeout)
+      self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
     except Exception as e:
       self.ser = None
       logger.exception("Error opening serial: %s", e)
 
   def Read(self):
-    # print("Making random numbers")
-    numbers = [randint(0, 1023) for _ in range(4)]
+    def ProcessValues(values):
+      # Fix our sensor ordering.
+      actual = []
+      for i in range(4):
+        actual.append(values[sensor_numbers[i]])
+      socketio.emit('get_values', {'values': actual})
+      socketio.sleep(0.01)
+
+    def ProcessThresholds(values):
+      cur_thresholds = self.profile_handler.GetCurThresholds()
+      for i, (cur, actual) in enumerate(zip(cur_thresholds, values)):
+        if cur != actual:
+          self.profile_handler.UpdateThresholds(sensor_numbers[i], actual)
+
     while not thread_stop_event.isSet():
-      # offsets = [int(normalvariate(0, 5)) for _ in range(4)]
-      # numbers = [max(0, min(numbers[i] + offsets[i], 1023)) for i in range(4)]
-      # socketio.emit('get_values', {'values': numbers})
-      # socketio.sleep(0.01)
       if not self.ser:
         self.Open()
         # Still not open, retry loop.
@@ -185,17 +193,26 @@ class SerialHandler(object):
           continue
 
       try:
+        # Send the command to fetch the values.
+        write_queue.put("v", block=False)
+
+        # Wait until we actually get the values.
         # This will block the thread until it gets a newline
         line = self.ser.readline()
-        values = [int(x) for x in line.split()[1:]]
 
-        if len(values) != 4:
+        # All commands are of the form:
+        #   cmd num1 num2 num3 num4
+        parts = line.split()
+        if len(parts != 5):
           continue
-        # We're printing Up, Right, Down, Left. Fix it.
-        actual = []
-        for i in range(4):
-          actual.append(values[sensor_numbers[i]])
-        socketio.emit('get_values', {'values': actual})
+        cmd = parts[0]
+        values = [int(x) for x in parts[1:]]
+
+        if cmd == "v":
+          ProcessValues(values)
+        elif cmd == "t":
+          ProcessThresholds(values)
+       
       except serial.SerialException as e:
         logger.error("Error reading data: ", e)
         self.Open()
@@ -207,9 +224,9 @@ class SerialHandler(object):
         time.sleep(1)
         continue
 
-      index, value = self.write_queue.get()
+      command = self.write_queue.get()
       try:
-        self.ser.write((str(sensor_numbers[index]) + str(value) + "\n").encode())
+        self.ser.write(command.encode())
         self.profile_handler.UpdateThresholds(index, value)
       except serial.SerialException as e:
         logger.error("Error writing data: ", e)
@@ -238,6 +255,11 @@ def connect():
   global write_thread
   print('Client connected')
   profile_handler.MaybeLoad()
+  # Potentially fetch any threshold values from the microcontroller that
+  # may be out of sync with our profiles.
+  serial_handler.write_queue.put("t", block=False)
+  # The above does emit if there are differences, so have an extra for the
+  # case there are no differences.
   socketio.emit('thresholds',
     {'thresholds': profile_handler.GetCurThresholds()})
 
@@ -257,7 +279,8 @@ def disconnect():
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
-    serial_handler.write_queue.put((index, values[index]), block=False)
+    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + "\n"
+    serial_handler.write_queue.put(threshold_cmd, block=False)
   except queue.Full as e:
     logger.error("Could not update thresholds. Queue full.")
 

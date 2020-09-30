@@ -110,6 +110,10 @@ class SensorState {
     return cur_value_;
   }
 
+  int GetThreshold() {
+    return user_threshold_;
+  }
+
   // Delete default constructor. Pin number MUST be explicitly specified.
   SensorState() = delete;
  
@@ -170,6 +174,14 @@ class SerialProcessor {
         case 'O':
           UpdateOffsets();
           break;
+        case 'v':
+        case 'V':
+          PrintValues();
+          break;
+        case 't':
+        case 'T':
+          PrintThresholds();
+          break;
         default:
           UpdateThreshold(bytes_read);
           break;
@@ -198,6 +210,24 @@ class SerialProcessor {
     }
   }
 
+  void PrintValues() {
+    Serial.print("v");
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      Serial.print(" ");
+      Serial.print(kSensorStates[i].GetCurValue());
+    }
+    Serial.print("\n");
+  }
+
+  void PrintThresholds() {
+    Serial.print("t");
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      Serial.print(" ");
+      Serial.print(kSensorStates[i].GetThreshold());
+    }
+    Serial.print("\n");
+  }
+
  private:
    static const size_t kBufferSize = 64;
    char buffer_[kBufferSize];
@@ -208,7 +238,7 @@ class SerialProcessor {
 SerialProcessor kSerialProcessor;
 
 void setup() {
-  kSerialProcessor.Init(9600);
+  kSerialProcessor.Init(115200);
   Joystick.begin();
 }
 
@@ -218,12 +248,7 @@ void loop() {
     kSerialProcessor.CheckAndMaybeProcessData();
   }
 
-
-  Serial.write("1023");
   for (size_t i = 0; i < kNumSensors; ++i) {
     kSensorStates[i].EvaluateSensor(i + 1);
-    Serial.print(" ");
-    Serial.print(kSensorStates[i].GetCurValue());
   }
-  Serial.print("\n");
 }
