@@ -1,5 +1,7 @@
+#include <inttypes.h>
+
 // Default threshold value for each of the sensors.
-const unsigned int kDefaultThreshold = 200;
+const int16_t kDefaultThreshold = 200;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 100;
 
@@ -10,9 +12,9 @@ class WeightedMovingAverage {
  public:
   WeightedMovingAverage(size_t size) : size_(min(size, kWindowSize)) {}
 
-  int GetAverage(int value) {
-    int next_sum = cur_sum_ + value - values_[cur_count_];
-    int next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
+  int16_t GetAverage(int16_t value) {
+    int32_t next_sum = cur_sum_ + value - values_[cur_count_];
+    int32_t next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
     cur_sum_ = next_sum;
     cur_weighted_sum_ = next_weighted_sum;
     values_[cur_count_] = value;
@@ -28,10 +30,10 @@ class WeightedMovingAverage {
 
  private:
   size_t size_;
-  int cur_sum_;
-  int cur_weighted_sum_;
+  int32_t cur_sum_;
+  int32_t cur_weighted_sum_;
   // Keep track of all values we have in a circular array.
-  int values_[kWindowSize];
+  int16_t values_[kWindowSize];
   size_t cur_count_;
 };
 
@@ -50,10 +52,10 @@ class HullMovingAverage {
   HullMovingAverage(size_t size) :
       wma1_(size/2), wma2_(size), hull_(sqrt(size)) {}
 
-  int GetAverage(int value) {
-    int wma1_value = wma1_.GetAverage(value);
-    int wma2_value = wma2_.GetAverage(value);
-    int hull_value = hull_.GetAverage(2 * wma1_value - wma2_value);
+  int16_t GetAverage(int16_t value) {
+    int16_t wma1_value = wma1_.GetAverage(value);
+    int16_t wma2_value = wma2_.GetAverage(value);
+    int16_t hull_value = hull_.GetAverage(2 * wma1_value - wma2_value);
 
     return hull_value;
   }
@@ -69,14 +71,14 @@ class HullMovingAverage {
 // Class containing all relevant information per sensor.
 class SensorState {
  public:
-  SensorState(unsigned int pin_value) :
+  SensorState(uint8_t pin_value) :
       pin_value_(pin_value), state_(SensorState::OFF),
       user_threshold_(kDefaultThreshold), moving_average_(kWindowSize),
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(int joystick_num) {
-    int sensor_value = analogRead(pin_value_);
+  void EvaluateSensor(uint8_t joystick_num) {
+    int16_t sensor_value = analogRead(pin_value_);
 
     // Fetch the updated Weighted Moving Average.
     cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
@@ -94,11 +96,11 @@ class SensorState {
     }
   }
 
-  void UpdateThreshold(unsigned int new_threshold) {
+  void UpdateThreshold(int16_t new_threshold) {
     user_threshold_ = new_threshold;
   }
 
-  unsigned int UpdateOffset() {
+  int16_t UpdateOffset() {
     // Update the offset with the last read value. UpdateOffset should be
     // called with no applied pressure on the panels so that it will be
     // calibrated correctly.
@@ -106,11 +108,11 @@ class SensorState {
     return offset_;
   }
 
-  int GetCurValue() {
+  int16_t GetCurValue() {
     return cur_value_;
   }
 
-  int GetThreshold() {
+  int16_t GetThreshold() {
     return user_threshold_;
   }
 
@@ -119,25 +121,25 @@ class SensorState {
  
  private:
   // The pin on the Teensy/Arduino corresponding to this sensor.
-  unsigned int pin_value_;
+  uint8_t pin_value_;
   // The current joystick state of the sensor.
   enum State { OFF, ON };
   State state_;
   // The user defined threshold value to activate/deactivate this sensor at.
-  int user_threshold_;
+  int16_t user_threshold_;
   // One-tailed width size to create a window around user_threshold_ to
   // mitigate fluctuations by noise. 
   // TODO(teejusb): Make this a user controllable variable.
-  const int kPaddingWidth = 1;
+  const int16_t kPaddingWidth = 1;
   
   // The smoothed moving average calculated to reduce some of the noise. 
   // NOTE(teejusb): Can use the HullMovingAverage as well, but
   // WeightedMovingAverage seemed sufficient.
   WeightedMovingAverage moving_average_;
 
-  int cur_value_;
+  int16_t cur_value_;
 
-  int offset_;
+  int16_t offset_;
 };
 
 /*===========================================================================*/
@@ -244,7 +246,7 @@ void setup() {
 }
 
 void loop() {
-  static unsigned int counter = 0;
+  static uint8_t counter = 0;
   if (counter++ % 10 == 0) {
     kSerialProcessor.CheckAndMaybeProcessData();
   }
