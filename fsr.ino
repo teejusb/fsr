@@ -1,5 +1,29 @@
 #include <inttypes.h>
 
+#ifdef CORE_TEENSY
+  // Use the Joystick library for Teensy
+  void ButtonStart() {
+    Joystick.begin();
+  }
+  void ButtonPress(uint8_t button) {
+    Joystick.button(button, 1);
+  }
+  void ButtonRelease(uint8_t button) {
+    Joystick.button(button, 0);
+  }
+#else
+  // And the Keyboard library for Arduino
+  void ButtonStart() {
+    Keyboard.begin();
+  }
+  void ButtonPress(uint8_t button) {
+    Keyboard.press('a' + button);
+  }
+  void ButtonRelease(uint8_t button) {
+    Keyboard.release('a' + button);
+  }
+#endif
+
 // Default threshold value for each of the sensors.
 const int16_t kDefaultThreshold = 200;
 // Max window size for both of the moving averages classes.
@@ -13,7 +37,12 @@ class WeightedMovingAverage {
   WeightedMovingAverage(size_t size) : size_(min(size, kWindowSize)) {}
 
   int16_t GetAverage(int16_t value) {
+    // Add current value and remove oldest value.
+    // e.g. with value = 5 and cur_count_ index = 0
+    // [1, 2, 3, 4] -> 10 becomes 10 + 5 - 1 = 14 -> [5, 2, 3, 4]
     int32_t next_sum = cur_sum_ + value - values_[cur_count_];
+    // Update weighted sum giving most weight to the newest value.
+    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40 -> [5*4, 2*1, 3*2, 4*3]
     int32_t next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
     cur_sum_ = next_sum;
     cur_weighted_sum_ = next_weighted_sum;
@@ -22,6 +51,7 @@ class WeightedMovingAverage {
     // Integer division is fine here since both the numerator and denominator
     // are integers and we need to return an int anyways. Off by one isn't
     // substantial here.
+    // Sum of weights = sum of all integers from [1, size_]
     return next_weighted_sum/((size_ * (size_ + 1)) / 2);
   }
 
@@ -77,7 +107,7 @@ class SensorState {
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(uint8_t joystick_num) {
+  void EvaluateSensor(uint8_t button_num) {
     int16_t sensor_value = analogRead(pin_value_);
 
     // Fetch the updated Weighted Moving Average.
@@ -85,13 +115,13 @@ class SensorState {
 
     if (cur_value_ >= user_threshold_ + kPaddingWidth &&
         state_ == SensorState::OFF) {
-      Joystick.button(joystick_num, 1);
+      ButtonPress(button_num);
       state_ = SensorState::ON;
     }
     
     if (cur_value_ < user_threshold_ - kPaddingWidth &&
         state_ == SensorState::ON) {
-      Joystick.button(joystick_num, 0);
+      ButtonRelease(button_num);
       state_ = SensorState::OFF;
     }
   }
@@ -135,7 +165,7 @@ class SensorState {
   // The smoothed moving average calculated to reduce some of the noise. 
   // NOTE(teejusb): Can use the HullMovingAverage as well, but
   // WeightedMovingAverage seemed sufficient.
-  WeightedMovingAverage moving_average_;
+  HullMovingAverage moving_average_;
 
   int16_t cur_value_;
 
@@ -242,7 +272,7 @@ SerialProcessor kSerialProcessor;
 
 void setup() {
   kSerialProcessor.Init(115200);
-  Joystick.begin();
+  ButtonStart();
 }
 
 void loop() {
