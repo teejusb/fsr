@@ -167,8 +167,9 @@ class SensorState {
   // WeightedMovingAverage seemed sufficient.
   HullMovingAverage moving_average_;
 
+  // The latest value obtained for this sensor.
   int16_t cur_value_;
-
+  // How much to shift the value read by during each read.
   int16_t offset_;
 };
 
