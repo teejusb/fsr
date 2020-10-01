@@ -44,7 +44,10 @@ class WeightedMovingAverage {
     // [1, 2, 3, 4] -> 10 becomes 10 + 5 - 1 = 14 -> [5, 2, 3, 4]
     int32_t next_sum = cur_sum_ + value - values_[cur_count_];
     // Update weighted sum giving most weight to the newest value.
-    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40 -> [4*5, 1*2, 2*3, 3*4]
+    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40
+    //     -> [4*5, 1*2, 2*3, 3*4]
+    // Subtracting by cur_sum_ is the same as removing 1 from each of the weight
+    // coefficients.
     int32_t next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
     cur_sum_ = next_sum;
     cur_weighted_sum_ = next_weighted_sum;
@@ -75,7 +78,8 @@ class WeightedMovingAverage {
 //
 // The algorithm is essentially:
 //   1. Calculate WMA of input values with a period of n/2 and multiply it by 2.
-//   2. Calculate WMA of input values with a period of n and subtract it from step 1.
+//   2. Calculate WMA of input values with a period of n and subtract it from
+//      step 1.
 //   3. Calculate WMA of the values from step 2 with a period of sqrt(2).
 //
 // HMA = WMA( 2 * WMA(input, n/2) - WMA(input, n), sqrt(n) )
