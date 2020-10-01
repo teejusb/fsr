@@ -28,6 +28,8 @@
 const int16_t kDefaultThreshold = 200;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 100;
+// Baud rate used for Serial communication. Technically ignored by Teensys.
+const int32_t kBaudRate = 115200;
 
 /*===========================================================================*/
 
@@ -42,7 +44,7 @@ class WeightedMovingAverage {
     // [1, 2, 3, 4] -> 10 becomes 10 + 5 - 1 = 14 -> [5, 2, 3, 4]
     int32_t next_sum = cur_sum_ + value - values_[cur_count_];
     // Update weighted sum giving most weight to the newest value.
-    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40 -> [5*4, 2*1, 3*2, 4*3]
+    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40 -> [4*5, 1*2, 2*3, 3*4]
     int32_t next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
     cur_sum_ = next_sum;
     cur_weighted_sum_ = next_weighted_sum;
@@ -216,13 +218,13 @@ class SerialProcessor {
           PrintThresholds();
           break;
         default:
-          UpdateThreshold(bytes_read);
+          UpdateAndPrintThreshold(bytes_read);
           break;
       }
     }  
   }
 
-  void UpdateThreshold(size_t bytes_read) {
+  void UpdateAndPrintThreshold(size_t bytes_read) {
     // Need to specify:
     // Sensor number + Threshold value.
     // {0, 1, 2, 3} + "0"-"1023"
@@ -272,7 +274,7 @@ class SerialProcessor {
 SerialProcessor kSerialProcessor;
 
 void setup() {
-  kSerialProcessor.Init(115200);
+  kSerialProcessor.Init(kBaudRate);
   ButtonStart();
 }
 
