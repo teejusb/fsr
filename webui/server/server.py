@@ -29,6 +29,10 @@ hostname = socket.gethostname()
 ip_address = socket.gethostbyname(hostname)
 print(' * WebUI can be found at: http://' + ip_address + ':5000')
 
+# Used for developmental purposes. Set this to true when you just want to
+# emulate the serial device instead of actually connecting to one.
+NO_SERIAL = False
+
 
 class ProfileHandler(object):
   """
@@ -132,7 +136,6 @@ class ProfileHandler(object):
   def GetCurrentProfile(self):
     return self.cur_profile
 
-
 class SerialHandler(object):
   """
   A class to handle all the serial interactions.
@@ -152,6 +155,10 @@ class SerialHandler(object):
     self.timeout = timeout
     self.write_queue = queue.Queue(10)
     self.profile_handler = profile_handler
+
+    # Use this to store the values when emulating serial so the graph isn't too
+    # jumpy. Only used when NO_SERIAL is true.
+    self.no_serial_values = [0, 0, 0, 0]
 
   def ChangePort(self, port):
     if self.ser:
@@ -194,51 +201,72 @@ class SerialHandler(object):
           self.profile_handler.UpdateThresholds(i, act)
 
     while not thread_stop_event.isSet():
-      if not self.ser:
-        self.Open()
-        # Still not open, retry loop.
+      if NO_SERIAL:
+        offsets = [int(normalvariate(0, 5)) for _ in range(4)]
+        self.no_serial_values = [
+          max(0, min(self.no_serial_values[i] + offsets[i], 1023))
+          for i in range(4)
+        ]
+        socketio.emit('get_values', {'values': self.no_serial_values})
+        socketio.sleep(0.01)
+      else:
         if not self.ser:
-          continue
+          self.Open()
+          # Still not open, retry loop.
+          if not self.ser:
+            continue
 
-      try:
-        # Send the command to fetch the values.
-        self.write_queue.put('v\n', block=False)
+        try:
+          # Send the command to fetch the values.
+          self.write_queue.put('v\n', block=False)
 
-        # Wait until we actually get the values.
-        # This will block the thread until it gets a newline
-        line = self.ser.readline().decode('ascii').strip()
+          # Wait until we actually get the values.
+          # This will block the thread until it gets a newline
+          line = self.ser.readline().decode('ascii').strip()
 
-        # All commands are of the form:
-        #   cmd num1 num2 num3 num4
-        parts = line.split()
-        if len(parts) != 5:
-          continue
-        cmd = parts[0]
-        values = [int(x) for x in parts[1:]]
+          # All commands are of the form:
+          #   cmd num1 num2 num3 num4
+          parts = line.split()
+          if len(parts) != 5:
+            continue
+          cmd = parts[0]
+          values = [int(x) for x in parts[1:]]
 
-        if cmd == 'v':
-          ProcessValues(values)
-        elif cmd == 't':
-          ProcessThresholds(values)
-       
-      except serial.SerialException as e:
-        logger.error('Error reading data: ', e)
-        self.Open()
+          if cmd == 'v':
+            ProcessValues(values)
+          elif cmd == 't':
+            ProcessThresholds(values)
+        except serial.SerialException as e:
+          logger.error('Error reading data: ', e)
+          self.Open()
 
   def Write(self):
     while not thread_stop_event.isSet():
-      if not self.ser:
-        # Just wait until the reader opens the serial port.
-        time.sleep(1)
-        continue
-
       command = self.write_queue.get()
-      try:
-        self.ser.write(command.encode())
-      except serial.SerialException as e:
-        logger.error('Error writing data: ', e)
-        # Emit current thresholds since we couldn't update the values.
-        socketio.emit('thresholds', {'thresholds': self.profile_handler.GetCurThresholds()})
+      if NO_SERIAL:
+        if command[0] == 't':
+          socketio.emit('thresholds',
+            {'thresholds': self.profile_handler.GetCurThresholds()})
+          print('Thresholds are: ' +
+            str(self.profile_handler.GetCurThresholds()))
+        else:
+          sensor, threshold = int(command[0]), int(command[1:-1])
+          for i, index in enumerate(sensor_numbers):
+            if index == sensor:
+              self.profile_handler.UpdateThresholds(i, threshold)
+      else:
+        if not self.ser:
+          # Just wait until the reader opens the serial port.
+          time.sleep(1)
+          continue
+
+        try:
+          self.ser.write(command.encode())
+        except serial.SerialException as e:
+          logger.error('Error writing data: ', e)
+          # Emit current thresholds since we couldn't update the values.
+          socketio.emit('thresholds',
+            {'thresholds': self.profile_handler.GetCurThresholds()})
 
 profile_handler = ProfileHandler()
 serial_handler = SerialHandler(profile_handler, port='/dev/ttyACM0')
@@ -251,9 +279,9 @@ def get_defaults():
     'thresholds': profile_handler.GetCurThresholds()
   }
 
-@app.route('/')
-def index():
-  return app.send_static_file('index.html')
+# @app.route('/')
+# def index():
+#   return app.send_static_file('index.html')
 
 
 @socketio.on('connect')
