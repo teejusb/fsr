@@ -264,6 +264,8 @@ function WebUI() {
 
 function Plot() {
   const canvasRef = React.useRef(null);
+  const colors = ['red', 'orange', 'green', 'blue'];
+  const display = [true, true, true, true];
 
   useEffect(() => {
     let requestId;
@@ -319,8 +321,6 @@ function Plot() {
           box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
       }
 
-      const colors = ['red', 'orange', 'green', 'blue'];
-
       // Display the current thresholds.
       for (let i = 0; i < 4; ++i) {
         ctx.beginPath();
@@ -334,20 +334,22 @@ function Plot() {
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/max_size;
-      for (let j = 0; j < 4; ++j) {
-        ctx.beginPath();
-        ctx.strokeStyle = colors[j];
-        for (let i = 0; i < max_size; ++i) {
-          if (i === kCurValues.length) { break; }
-          if (i === 0) {
-            ctx.moveTo(spacing,
-              box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
-          } else {
-            ctx.lineTo(px_per_div*i + spacing,
-              box_height - box_height * kCurValues[(i + oldest) % max_size][j]/1023 + spacing);
+      for (let i = 0; i < 4; ++i) {
+        if (display[i]) {
+          ctx.beginPath();
+          ctx.strokeStyle = colors[i];
+          for (let j = 0; j < max_size; ++j) {
+            if (j === kCurValues.length) { break; }
+            if (j === 0) {
+              ctx.moveTo(spacing,
+                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+            } else {
+              ctx.lineTo(px_per_div*j + spacing,
+                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+            }
           }
+          ctx.stroke();
         }
-        ctx.stroke();
       }
 
       // Display the current value for each of the sensors.
@@ -355,12 +357,14 @@ function Plot() {
       const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
       ctx.font = "30px " + bodyFontFamily;
       for (let i = 0; i < 4; ++i) {
-        ctx.fillStyle = colors[i];
-        if (kCurValues.length < max_size) {
-          ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
-        } else {
-          ctx.fillText(
-            kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+        if (display[i]) {
+          ctx.fillStyle = colors[i];
+          if (kCurValues.length < max_size) {
+            ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
+          } else {
+            ctx.fillText(
+              kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+          }
         }
       }
 
@@ -372,13 +376,43 @@ function Plot() {
     return () => {
       cancelAnimationFrame(requestId);
     };
-  }, []);
+  }, [colors, display]);
+
+  function ToggleLine(index) {
+    display[index] = !display[index];
+  }
 
   return (
     <header className="App-header">
-      <canvas
-        ref={canvasRef}
-        style={{border: '1px solid white', width: '100%', height: '100%'}} />
+      <Container fluid style={{border: '1px solid white', height: '100vh'}}>
+        <Row>
+          <Col style={{height: '9vh', paddingTop: '2vh'}}>
+            <span>Display: </span>
+            <Button variant="light" size="sm" onClick={() => ToggleLine(0)}>
+              <b style={{color: colors[0]}}>Left</b>
+            </Button>
+            <span> </span>
+            <Button variant="light" size="sm" onClick={() => ToggleLine(1)}>
+              <b style={{color: colors[1]}}>Down</b>
+            </Button>
+            <span> </span>
+            <Button variant="light" size="sm" onClick={() => ToggleLine(2)}>
+              <b style={{color: colors[2]}}>Up</b>
+            </Button>
+            <span> </span>
+            <Button variant="light" size="sm" onClick={() => ToggleLine(3)}>
+              <b style={{color: colors[3]}}>Right</b>
+            </Button>
+          </Col>
+        </Row>
+        <Row>
+          <Col style={{height: '86vh'}}>
+            <canvas
+              ref={canvasRef}
+              style={{border: '1px solid white', width: '100%', height: '100%', touchAction: "none"}} />
+          </Col>
+        </Row>
+      </Container>
     </header>
   );
 }
