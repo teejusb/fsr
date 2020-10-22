@@ -321,23 +321,14 @@ function Plot() {
           box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
       }
 
-      // Display the current thresholds.
-      for (let i = 0; i < 4; ++i) {
-        ctx.beginPath();
-        ctx.setLineDash([]);
-        ctx.strokeStyle = colors[i];
-        ctx.lineWidth = 2;
-        ctx.moveTo(spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
-        ctx.lineTo(box_width + spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
-        ctx.stroke();
-      }
-
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/max_size;
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.beginPath();
+          ctx.setLineDash([]);
           ctx.strokeStyle = colors[i];
+          ctx.lineWidth = 2;
           for (let j = 0; j < max_size; ++j) {
             if (j === kCurValues.length) { break; }
             if (j === 0) {
@@ -348,6 +339,19 @@ function Plot() {
                 box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
             }
           }
+          ctx.stroke();
+        }
+      }
+
+      // Display the current thresholds.
+      for (let i = 0; i < 4; ++i) {
+        if (display[i]) {
+          ctx.beginPath();
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'dark' + colors[i];
+          ctx.lineWidth = 2;
+          ctx.moveTo(spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
+          ctx.lineTo(box_width + spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
           ctx.stroke();
         }
       }
