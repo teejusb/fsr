@@ -4,23 +4,24 @@
   // Use the Joystick library for Teensy
   void ButtonStart() {
     Joystick.begin();
+    Joystick.useManualSend(true);
   }
-  void ButtonPress(uint8_t button) {
-    Joystick.button(button, 1);
+  void ButtonPress(uint8_t button_num) {
+    Joystick.button(button_num, 1);
   }
-  void ButtonRelease(uint8_t button) {
-    Joystick.button(button, 0);
+  void ButtonRelease(uint8_t button_num) {
+    Joystick.button(button_num, 0);
   }
 #else
   // And the Keyboard library for Arduino
   void ButtonStart() {
     Keyboard.begin();
   }
-  void ButtonPress(uint8_t button) {
-    Keyboard.press('a' + button);
+  void ButtonPress(uint8_t button_num) {
+    Keyboard.press('a' + button_num - 1);
   }
-  void ButtonRelease(uint8_t button) {
-    Keyboard.release('a' + button);
+  void ButtonRelease(uint8_t button_num) {
+    Keyboard.release('a' + button_num - 1);
   }
 #endif
 
@@ -113,7 +114,7 @@ class SensorState {
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(uint8_t button_num) {
+  void EvaluateSensor(uint8_t button_num, unsigned long curMillis) {
     int16_t sensor_value = analogRead(pin_value_);
 
     // Fetch the updated Weighted Moving Average.
@@ -123,6 +124,7 @@ class SensorState {
         state_ == SensorState::OFF) {
       ButtonPress(button_num);
       state_ = SensorState::ON;
+      last_trigger_ms_ = curMillis;
     }
     
     if (cur_value_ < user_threshold_ - kPaddingWidth &&
@@ -130,6 +132,10 @@ class SensorState {
       ButtonRelease(button_num);
       state_ = SensorState::OFF;
     }
+
+//    if (state_ == SensorState::OFF && curMillis - last_trigger_ms_ >= 3000) {
+//      UpdateOffset();
+//    }
   }
 
   void UpdateThreshold(int16_t new_threshold) {
@@ -177,6 +183,8 @@ class SensorState {
   int16_t cur_value_;
   // How much to shift the value read by during each read.
   int16_t offset_;
+  // Timestamp of when the last time this sensor was triggered.
+  unsigned long last_trigger_ms_ = 0;
 };
 
 /*===========================================================================*/
@@ -276,19 +284,42 @@ class SerialProcessor {
 /*===========================================================================*/
 
 SerialProcessor kSerialProcessor;
+// Durations are always "unsigned long" regardless of board type.
+unsigned long delayOverhead = 0;
 
 void setup() {
+  // See how long the delay function itself takes.
+  // We use this to try and get a stable 1KHz polling rate.
+  unsigned long startMicros = micros();
+  delayMicroseconds(1000);
+  delayOverhead = 1000 - (micros() - startMicros);
+  if (delayOverhead < 0) {
+    delayOverhead = 0;
+  }
+  
   kSerialProcessor.Init(kBaudRate);
   ButtonStart();
 }
 
 void loop() {
-  static uint8_t counter = 0;
-  if (counter++ % 10 == 0) {
-    kSerialProcessor.CheckAndMaybeProcessData();
+  unsigned long startMicros = micros();
+
+  kSerialProcessor.CheckAndMaybeProcessData();
+
+  unsigned long curMillis = millis();  
+  for (size_t i = 0; i < kNumSensors; ++i) {
+    kSensorStates[i].EvaluateSensor(i + 1, curMillis);
   }
 
-  for (size_t i = 0; i < kNumSensors; ++i) {
-    kSensorStates[i].EvaluateSensor(i + 1);
+  #ifdef CORE_TEENSY
+    Joystick.send_now();
+  #endif
+
+  // How long did this poll take?
+  unsigned long duration = micros() - startMicros;
+
+  // Delay an appropriate amount to try and get consistent polling.
+  if (1000 - delayOverhead - duration > 0) {
+    delayMicroseconds(1000 - delayOverhead - duration);
   }
 }
