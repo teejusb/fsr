@@ -44,7 +44,7 @@ class WeightedMovingAverage {
 
   int16_t GetAverage(int16_t value) {
     // Add current value and remove oldest value.
-    // e.g. with value = 5 and cur_count_ index = 0
+    // e.g. with value = 5 and cur_count_ = 0
     // [4, 3, 2, 1] -> 10 becomes 10 + 5 - 4 = 11 -> [5, 3, 2, 1]
     int32_t next_sum = cur_sum_ + value - values_[cur_count_];
     // Update weighted sum giving most weight to the newest value.
@@ -117,23 +117,25 @@ class SensorState {
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(uint8_t button_num, unsigned long curMillis) {
+  void EvaluateSensor(uint8_t button_num, unsigned long curMillis, bool willSend) {
     int16_t sensor_value = analogRead(pin_value_);
 
     // Fetch the updated Weighted Moving Average.
     cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
 
-    if (cur_value_ >= user_threshold_ + kPaddingWidth &&
-        state_ == SensorState::OFF) {
-      ButtonPress(button_num);
-      state_ = SensorState::ON;
-      last_trigger_ms_ = curMillis;
-    }
-    
-    if (cur_value_ < user_threshold_ - kPaddingWidth &&
-        state_ == SensorState::ON) {
-      ButtonRelease(button_num);
-      state_ = SensorState::OFF;
+    if (willSend) {
+      if (cur_value_ >= user_threshold_ + kPaddingWidth &&
+          state_ == SensorState::OFF) {
+        ButtonPress(button_num);
+        state_ = SensorState::ON;
+        last_trigger_ms_ = curMillis;
+      }
+      
+      if (cur_value_ < user_threshold_ - kPaddingWidth &&
+          state_ == SensorState::ON) {
+        ButtonRelease(button_num);
+        state_ = SensorState::OFF;
+      }
     }
 
 //    if (state_ == SensorState::OFF && curMillis - last_trigger_ms_ >= 3000) {
@@ -285,43 +287,41 @@ class SerialProcessor {
 /*===========================================================================*/
 
 SerialProcessor serialProcessor;
-// Durations are always "unsigned long" regardless of board type.
-// Don't need to explicitly worry about the widths.
-unsigned long delayOverhead = 0;
+// Timestamps are always "unsigned long" regardless of board type So don't need
+// to explicitly worry about the widths.
+unsigned long lastSend = 0;
+// loopTime is used to estimate how long it takes to run one iteration of
+// loop().
+long loopTime = -1;
 
 void setup() {
-  // See how long the delay function itself takes.
-  // We use this to try and get a stable 1KHz polling rate.
-  unsigned long startMicros = micros();
-  delayMicroseconds(1000);
-  delayOverhead = 1000 - (micros() - startMicros);
-  if (delayOverhead < 0) {
-    delayOverhead = 0;
-  }
-  
   serialProcessor.Init(kBaudRate);
   ButtonStart();
 }
 
 void loop() {
   unsigned long startMicros = micros();
+  // We only want to send over USB every millisecond, but we still want to
+  // read the analog values as fast as we can to have the most up to date
+  // values for the average.
+  static bool willSend = (loopTime == -1 ||
+                          startMicros - lastSend + loopTime >= 1000);
 
   serialProcessor.CheckAndMaybeProcessData();
 
   unsigned long curMillis = millis();  
   for (size_t i = 0; i < kNumSensors; ++i) {
-    kSensorStates[i].EvaluateSensor(i + 1, curMillis);
+    kSensorStates[i].EvaluateSensor(i + 1, curMillis, willSend);
   }
 
-  #ifdef CORE_TEENSY
-    Joystick.send_now();
-  #endif
+  if (willSend) {
+    lastSend = startMicros;
+    #ifdef CORE_TEENSY
+        Joystick.send_now();
+    #endif
+  }
 
-  // How long did this poll take?
-  unsigned long duration = micros() - startMicros;
-
-  // Delay an appropriate amount to try and get consistent polling.
-  if (1000 - delayOverhead - duration > 0) {
-    delayMicroseconds(1000 - delayOverhead - duration);
+  if (loopTime == -1) {
+    loopTime = micros() - startMicros;
   }
 }
