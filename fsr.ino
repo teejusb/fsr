@@ -35,9 +35,9 @@ const int32_t kBaudRate = 115200;
 /*===========================================================================*/
 
 // Calculates the Weighted Moving Average for a given period size.
-// Expected values provided to this class should fall in [−32,768, 32,767]
-// otherwise it will overflow. We use a 32-bit integer for the intermediate
-// sums which we then restrict back down.
+// Values provided to this class should fall in [−32,768, 32,767] otherwise it
+// may overflow. We use a 32-bit integer for the intermediate sums which we
+// then restrict back down to 16-bits.
 class WeightedMovingAverage {
  public:
   WeightedMovingAverage(size_t size) : size_(min(size, kWindowSize)) {}
@@ -45,11 +45,11 @@ class WeightedMovingAverage {
   int16_t GetAverage(int16_t value) {
     // Add current value and remove oldest value.
     // e.g. with value = 5 and cur_count_ index = 0
-    // [1, 2, 3, 4] -> 10 becomes 10 + 5 - 1 = 14 -> [5, 2, 3, 4]
+    // [4, 3, 2, 1] -> 10 becomes 10 + 5 - 4 = 11 -> [5, 3, 2, 1]
     int32_t next_sum = cur_sum_ + value - values_[cur_count_];
     // Update weighted sum giving most weight to the newest value.
-    // [1*1, 2*2, 3*3, 4*4] -> 30 becomes 30 + 4*5 - 10 = 40
-    //     -> [4*5, 1*2, 2*3, 3*4]
+    // [1*4, 2*3, 3*2, 4*1] -> 20 becomes 20 + 4*5 - 10 = 30
+    //     -> [4*5, 1*3, 2*2, 3*1]
     // Subtracting by cur_sum_ is the same as removing 1 from each of the weight
     // coefficients.
     int32_t next_weighted_sum = cur_weighted_sum_ + size_ * value - cur_sum_;
