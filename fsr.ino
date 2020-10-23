@@ -35,6 +35,9 @@ const int32_t kBaudRate = 115200;
 /*===========================================================================*/
 
 // Calculates the Weighted Moving Average for a given period size.
+// Expected values provided to this class should fall in [−32,768, 32,767]
+// otherwise it will overflow. We use a 32-bit integer for the intermediate
+// sums which we then restrict back down.
 class WeightedMovingAverage {
  public:
   WeightedMovingAverage(size_t size) : size_(min(size, kWindowSize)) {}
@@ -175,8 +178,6 @@ class SensorState {
   const int16_t kPaddingWidth = 1;
   
   // The smoothed moving average calculated to reduce some of the noise. 
-  // NOTE(teejusb): Can use the HullMovingAverage as well, but
-  // WeightedMovingAverage seemed sufficient.
   HullMovingAverage moving_average_;
 
   // The latest value obtained for this sensor.
@@ -283,8 +284,9 @@ class SerialProcessor {
 
 /*===========================================================================*/
 
-SerialProcessor kSerialProcessor;
+SerialProcessor serialProcessor;
 // Durations are always "unsigned long" regardless of board type.
+// Don't need to explicitly worry about the widths.
 unsigned long delayOverhead = 0;
 
 void setup() {
@@ -297,14 +299,14 @@ void setup() {
     delayOverhead = 0;
   }
   
-  kSerialProcessor.Init(kBaudRate);
+  serialProcessor.Init(kBaudRate);
   ButtonStart();
 }
 
 void loop() {
   unsigned long startMicros = micros();
 
-  kSerialProcessor.CheckAndMaybeProcessData();
+  serialProcessor.CheckAndMaybeProcessData();
 
   unsigned long curMillis = millis();  
   for (size_t i = 0; i < kNumSensors; ++i) {
