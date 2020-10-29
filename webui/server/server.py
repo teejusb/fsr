@@ -18,7 +18,8 @@ logging.getLogger('werkzeug').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "/dev/cu.usbmodem83828101"
+HTTP_PORT = 5000
 
 # Threads for the serial reader and writer.
 read_thread = Thread()
@@ -347,5 +348,5 @@ def add_profile(profile_name):
 if __name__ == '__main__':
   hostname = socket.gethostname()
   ip_address = socket.gethostbyname(hostname)
-  print(' * WebUI can be found at: http://' + ip_address + ':5000')
-  socketio.run(app, host='0.0.0.0', port=str(port))
+  print(' * WebUI can be found at: http://' + ip_address + ":" +  str(HTTP_PORT))
+  socketio.run(app, host='0.0.0.0', port=str(HTTP_PORT))

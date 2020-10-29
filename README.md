@@ -1,5 +1,15 @@
 # fsr
-FSR code used for dance pads
+A complete software package for FSR dance pads.
+
+## Features
+- React web UI to customize sensitivity 
+- Profiles & persistence
+- Light support
+
+## Screenshots
+<img src="./img/fsr2.gif">
+
+<img src="./img/fsr1.gif">
 
 
 ## Requirements
@@ -48,7 +58,6 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 The UI should be up and running on http://localhost:3000 and you can use your device IP and the port to reach it from your phone (e.g. 192.168.0.xxx:5000 )
 
 
-
-
-## Tips 
-- so if you do use localhost in your browser, and if the ui looks choppy, try using your local IP instead
+## Troubleshooting 
+- If you use localhost in your browser and if the UI looks choppy, try using your local IP instead
+- If you see the following error, ensure the "Serial Monitor" isn't already open in Arduino IDE `serial.serialutil.SerialException: [Errno 16] could not open port /dev/cu.usbmodem83828101: [Errno 16] Resource busy: '/dev/cu.usbmodem83828101`
