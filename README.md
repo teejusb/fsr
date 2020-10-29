@@ -49,7 +49,7 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
     - You also may need to modify the `sensor_numbers` variable. These sensor numbers come from fsr.ino.
     - For Example, youre using Analog 6, 5, 4, 3. analog 6 is left, 5 is Down, 4 is up, 3 is right. in FSR.ino the order you listed them is the order they will be addressed in server.py
 1. Open a command prompt (or terminal) and navigate to `./webui/server` with `cd webui/server`
-1. Run `python -m venv venv`
+1. Run `python -m venv venv` (on Windows you may need to replace `python` with `py`)
 1. Run `venv\Scripts\activate`
 1. Run `pip install -r requirements.txt` to install dependencies
 1. Then move to the `./webui` directory by doing `cd ..`
