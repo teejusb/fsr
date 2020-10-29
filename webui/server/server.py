@@ -33,6 +33,16 @@ print(' * WebUI can be found at: http://' + ip_address + ':5000')
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
+def ThreadIsAlive(thread):
+  def has_method(o, name):
+    return callable(getattr(o, name, None))
+
+  if has_method(thread, 'isAlive'):
+    return thread.isAlive()
+  elif has_method(thread, 'is_alive'):
+    return thread.is_alive()
+  else:
+    return False
 
 class ProfileHandler(object):
   """
@@ -279,9 +289,9 @@ def get_defaults():
     'thresholds': profile_handler.GetCurThresholds()
   }
 
-# @app.route('/')
-# def index():
-#   return app.send_static_file('index.html')
+@app.route('/')
+def index():
+  return app.send_static_file('index.html')
 
 
 @socketio.on('connect')
@@ -298,11 +308,11 @@ def connect():
   socketio.emit('thresholds',
     {'thresholds': profile_handler.GetCurThresholds()})
 
-  if not read_thread.isAlive():
+  if not ThreadIsAlive(read_thread):
     print('Starting Read Thread')
     read_thread = socketio.start_background_task(serial_handler.Read)
 
-  if not write_thread.isAlive():
+  if not ThreadIsAlive(write_thread):
     print('Starting Write Thread')
     write_thread = socketio.start_background_task(serial_handler.Write)
 

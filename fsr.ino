@@ -32,6 +32,10 @@ const size_t kWindowSize = 100;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
 const int32_t kBaudRate = 115200;
 
+// We don't want to use digital pins 0 and 1 as they're needed for Serial
+// communication.
+#define DIGITAL_PIN_OFFSET 2
+
 /*===========================================================================*/
 
 // Calculates the Weighted Moving Average for a given period size.
@@ -129,12 +133,14 @@ class SensorState {
         ButtonPress(button_num);
         state_ = SensorState::ON;
         last_trigger_ms_ = curMillis;
+        digitalWrite(button_num + DIGITAL_PIN_OFFSET, HIGH);
       }
       
       if (cur_value_ < user_threshold_ - kPaddingWidth &&
           state_ == SensorState::ON) {
         ButtonRelease(button_num);
         state_ = SensorState::OFF;
+        digitalWrite(button_num + DIGITAL_PIN_OFFSET, LOW);
       }
     }
 
@@ -297,6 +303,9 @@ long loopTime = -1;
 void setup() {
   serialProcessor.Init(kBaudRate);
   ButtonStart();
+  for (size_t i = 0; i < kNumSensors; ++i) {
+    pinMode(i + DIGITAL_PIN_OFFSET, OUTPUT);
+  }
 }
 
 void loop() {
