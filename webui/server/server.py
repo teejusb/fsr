@@ -17,6 +17,9 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# Edit this to match the serial port name shown in Arduino IDE
+SERIAL_PORT = "/dev/ttyACM0"
+
 # Threads for the serial reader and writer.
 read_thread = Thread()
 write_thread = Thread()
@@ -279,7 +282,7 @@ class SerialHandler(object):
             {'thresholds': self.profile_handler.GetCurThresholds()})
 
 profile_handler = ProfileHandler()
-serial_handler = SerialHandler(profile_handler, port='/dev/ttyACM0')
+serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
 
 @app.route('/defaults')
 def get_defaults():
