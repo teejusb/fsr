@@ -54,7 +54,7 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 1. Then move to the `./webui` directory by doing `cd ..`
 1. Run `yarn install && yarn build && yarn start-api`
 
-The UI should be up and running on http://localhost:3000 and you can use your device IP and the port to reach it from your phone (e.g. 192.168.0.xxx:5000 )
+The UI should be up and running on http://localhost:3000 and you can use your device IP and the port to reach it from your phone (e.g. http://192.168.0.xxx:5000 )
 
 
 ## Troubleshooting 
