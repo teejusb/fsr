@@ -7,9 +7,9 @@ A complete software package for FSR dance pads.
 - Light support
 
 ## Screenshots
-<img src="./img/fsr2.gif">
+<img src="./img/fsr2.gif" width="550">
 
-<img src="./img/fsr1.gif">
+<img src="./img/fsr1.gif" width="550">
 
 
 ## Requirements
