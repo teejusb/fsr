@@ -13,7 +13,8 @@ A complete software package for FSR dance pads.
 
 
 ## Requirements
-- A [Teensy](https://www.pjrc.com/store/index.html)
+- A [Teensy](https://www.pjrc.com/store/index.html) or Arduino
+  - uses native keyboard library for Arduino and Joystick library for Teensy
 - Python 3.6+
     - virtualenv
 - Node 12+
@@ -25,10 +26,10 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 ## Firmware setup
 1. Install [Arduino IDE](https://www.arduino.cc/en/software) (skip this if you're using OSX as it's included in Teensyduino)
 1. Install [Teensyduino](https://www.pjrc.com/teensy/td_download.html) and get it connected to your Teensy and able to push firmware via Arduino IDE
-1. In Arduinio IDE, set the `Tools` > `USB Type` to `Serial + Keyboard + Mouse + Joystick`
-1. In Arduinio IDE, set the `Tools` > `Board` to `Teensy 4.0`
+1. In Arduinio IDE, set the `Tools` > `USB Type` to `Serial + Keyboard + Mouse + Joystick` (or `Serial + Keyboard + Mouse`)
+1. In Arduinio IDE, set the `Tools` > `Board` to your microcontroller (e.g. `Teensy 4.0`)
 
-1. In Arduinio IDE, set the `Tools` > `Port` select the COM port of the plugged in Teensy
+1. In Arduinio IDE, set the `Tools` > `Port` to select the serial port for the plugged in microcontroller (e.g. `COM5` or `/dev/something`)
 1. Copy in the code from [fsr.ino](./fsr.ino)
 1. By default, [A0-A3 are the pins](https://forum.pjrc.com/teensy40_pinout1.png) used for the FSR sensors in this software. If you aren't using these pins [alter the SensorState array](fsr.ino#L204-L209)
 1. Push the code to the board
@@ -46,8 +47,7 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 1. Install [Node](https://nodejs.org/en/download/)
     - You may optionally install [yarn](https://classic.yarnpkg.com/en/docs/install#windows-stable). Alternatively, you can substitute `yarn` commands for `npm` which should have came with Node.
 1. Within [server.py](./webui/server/server.py), edit the `SERIAL_PORT` constant to match the serial port shown in the Arduino IDE (e.g. it might look like `"/dev/ttyACM0"` or `"COM1"`)
-    - You also may need to modify the `sensor_numbers` variable. These sensor numbers come from fsr.ino.
-    - For Example, youre using Analog 6, 5, 4, 3. analog 6 is left, 5 is Down, 4 is up, 3 is right. in FSR.ino the order you listed them is the order they will be addressed in server.py
+    - You also may need to [modify](https://github.com/teejusb/fsr/pull/1#discussion_r514585060) the `sensor_numbers` variable.
 1. Open a command prompt (or terminal) and navigate to `./webui/server` with `cd webui/server`
 1. Run `python -m venv venv` (on Windows you may need to replace `python` with `py`)
 1. Run `venv\Scripts\activate`

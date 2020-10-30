@@ -18,7 +18,7 @@ logging.getLogger('werkzeug').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/cu.usbmodem83828101"
+SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
 # Threads for the serial reader and writer.
