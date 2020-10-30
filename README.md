@@ -28,7 +28,6 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 1. Install [Teensyduino](https://www.pjrc.com/teensy/td_download.html) and get it connected to your Teensy and able to push firmware via Arduino IDE
 1. In Arduinio IDE, set the `Tools` > `USB Type` to `Serial + Keyboard + Mouse + Joystick` (or `Serial + Keyboard + Mouse`)
 1. In Arduinio IDE, set the `Tools` > `Board` to your microcontroller (e.g. `Teensy 4.0`)
-
 1. In Arduinio IDE, set the `Tools` > `Port` to select the serial port for the plugged in microcontroller (e.g. `COM5` or `/dev/something`)
 1. Copy in the code from [fsr.ino](./fsr.ino)
 1. By default, [A0-A3 are the pins](https://forum.pjrc.com/teensy40_pinout1.png) used for the FSR sensors in this software. If you aren't using these pins [alter the SensorState array](fsr.ino#L204-L209)
