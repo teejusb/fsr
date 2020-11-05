@@ -133,14 +133,14 @@ class SensorState {
         ButtonPress(button_num);
         state_ = SensorState::ON;
         last_trigger_ms_ = curMillis;
-        digitalWrite(button_num + DIGITAL_PIN_OFFSET, HIGH);
+        digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, HIGH);
       }
       
       if (cur_value_ < user_threshold_ - kPaddingWidth &&
           state_ == SensorState::ON) {
         ButtonRelease(button_num);
         state_ = SensorState::OFF;
-        digitalWrite(button_num + DIGITAL_PIN_OFFSET, LOW);
+        digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, LOW);
       }
     }
 
