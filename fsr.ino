@@ -48,7 +48,9 @@ const long kBaudRate = 115200;
 // then restrict back down to 16-bits.
 class WeightedMovingAverage {
  public:
-  WeightedMovingAverage(size_t size) : size_(min(size, kWindowSize)) {}
+  WeightedMovingAverage(size_t size) :
+      size_(min(size, kWindowSize)), cur_sum_(0), cur_weighted_sum_(0),
+      values_{}, cur_count_(0) {}
 
   int16_t GetAverage(int16_t value) {
     // Add current value and remove oldest value.
