@@ -12,7 +12,10 @@
   void ButtonRelease(uint8_t button_num) {
     Joystick.button(button_num, 0);
   }
+  // Max window size for both of the moving averages classes.
+  const size_t kWindowSize = 100;
 #else
+  #include <Keyboard.h>
   // And the Keyboard library for Arduino
   void ButtonStart() {
     Keyboard.begin();
@@ -23,14 +26,15 @@
   void ButtonRelease(uint8_t button_num) {
     Keyboard.release('a' + button_num - 1);
   }
+  // Max window size for both of the moving averages classes.
+  // Arduino has less memory so reduce the kWindowSize to make this sketch fit.
+  const size_t kWindowSize = 50;
 #endif
 
 // Default threshold value for each of the sensors.
 const int16_t kDefaultThreshold = 200;
-// Max window size for both of the moving averages classes.
-const size_t kWindowSize = 100;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
-const int32_t kBaudRate = 115200;
+const unsigned int kBaudRate = 115200;
 
 // We don't want to use digital pins 0 and 1 as they're needed for Serial
 // communication.
