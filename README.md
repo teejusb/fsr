@@ -1,5 +1,5 @@
 # fsr
-A complete software package for FSR dance pads.
+A complete software package for FSR dance pads.  
 Join the [discord](https://discord.gg/RamvtwuEF2) for any questions/suggestions
 
 ## Features
