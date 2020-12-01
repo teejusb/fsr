@@ -27,7 +27,7 @@ write_thread = Thread()
 thread_stop_event = Event()
 
 # L, D, U, R
-sensor_numbers = [3, 2, 0, 1]
+sensor_numbers = [0, 1, 2, 3]
 
 hostname = socket.gethostname()
 ip_address = socket.gethostbyname(hostname)
@@ -109,7 +109,7 @@ class ProfileHandler(object):
     if profile_name in self.profiles:
       self.cur_profile = profile_name
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
-      socketio.emit('get_cur_profiles',
+      socketio.emit('get_cur_profile',
                     {'cur_profile': self.GetCurrentProfile()})
       print('Changed to profile "{}" with thresholds: {}'.format(
         self.GetCurrentProfile(), str(self.GetCurThresholds())))
@@ -121,13 +121,13 @@ class ProfileHandler(object):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
       self.profiles[''] = [0, 0 ,0, 0]
+    # ChangeProfile emits 'thresholds' and 'cur_profile'
     self.ChangeProfile(profile_name)
     with open(self.filename, 'w') as f:
       for name, thresholds in self.profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
     socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
-    socketio.emit('get_cur_profiles', {'cur_profile': self.GetCurrentProfile()})
     print('Added profile "{}" with thresholds: {}'.format(
       self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
@@ -142,7 +142,7 @@ class ProfileHandler(object):
             f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
       socketio.emit('get_profiles', {'profiles': self.GetProfileNames()})
       socketio.emit('thresholds', {'thresholds': self.GetCurThresholds()})
-      socketio.emit('get_cur_profiles',
+      socketio.emit('get_cur_profile',
                     {'cur_profile': self.GetCurrentProfile()})
       print('Removed profile "{}". Current thresholds are: {}'.format(
         profile_name, str(self.GetCurThresholds())))
@@ -191,6 +191,12 @@ class SerialHandler(object):
 
     try:
       self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
+      if self.ser:
+        # Apply currently loaded thresholds when the microcontroller connects.
+        for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
+          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
+          self.write_queue.put(threshold_cmd, block=False)
+
     except Exception as e:
       self.ser = None
       logger.exception('Error opening serial: %s', e)
@@ -293,9 +299,10 @@ def get_defaults():
     'thresholds': profile_handler.GetCurThresholds()
   }
 
-@app.route('/')
-def index():
-  return app.send_static_file('index.html')
+if not NO_SERIAL:
+  @app.route('/')
+  def index():
+    return app.send_static_file('index.html')
 
 
 @socketio.on('connect')

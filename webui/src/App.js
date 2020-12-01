@@ -434,21 +434,22 @@ function App() {
           setProfiles(data.profiles);
           setActiveProfile(data.cur_profile);
           kCurThresholds = data.thresholds;
-          socket.on('get_profiles', function(msg) {
-            setProfiles(msg.profiles);
-          });
-          socket.on('get_cur_profiles', function(msg) {
-            setActiveProfile(msg.cur_profile);
-          });
           setFetched(true);
       });
     }
 
+    socket.on('get_profiles', function(msg) {
+      setProfiles(msg.profiles);
+    });
+    socket.on('get_cur_profile', function(msg) {
+      setActiveProfile(msg.cur_profile);
+    });
+
     return () => {
       socket.off('get_profiles');
-      socket.off('get_cur_profiles');
+      socket.off('get_cur_profile');
     };
-  }, [fetched]);
+  }, [fetched, profiles, activeProfile]);
 
   function AddProfile(e) {
     // Only add a profile on the enter key.
