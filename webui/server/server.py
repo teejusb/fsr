@@ -343,14 +343,24 @@ def update_threshold(values, index):
 @socketio.on('add_profile')
 def add_profile(profile_name, thresholds):
   profile_handler.AddProfile(profile_name, thresholds)
+  # When we add a profile, we are using the currently loaded thresholds so we
+  # don't need to explicitly apply anything.
 
 @socketio.on('remove_profile')
-def add_profile(profile_name):
+def remove_profile(profile_name):
   profile_handler.RemoveProfile(profile_name)
+  # Need to apply the thresholds of the profile we've fallen back to.
+  thresholds = profile_handler.GetCurThresholds()
+  for i in range(len(thresholds)):
+    update_threshold(thresholds, i)
 
 @socketio.on('change_profile')
-def add_profile(profile_name):
+def change_profile(profile_name):
   profile_handler.ChangeProfile(profile_name)
+  # Need to apply the thresholds of the profile we've changed to.
+  thresholds = profile_handler.GetCurThresholds()
+  for i in range(len(thresholds)):
+    update_threshold(thresholds, i)
 
 if __name__ == '__main__':
   hostname = socket.gethostname()
