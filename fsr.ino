@@ -1,5 +1,14 @@
 #include <inttypes.h>
 
+// BEGIN DOM'S FASTLED SETUP
+#include <FastLED.h>
+#define NUM_LEDS 3
+#define DATA_PIN 10
+#define CLOCK_PIN 11
+CRGB leds[NUM_LEDS];
+// END DOM'S FASTLED SETUP
+
+
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
   void ButtonStart() {
@@ -30,7 +39,7 @@
 #endif
 
 // Default threshold value for each of the sensors.
-const int16_t kDefaultThreshold = 1000;
+const int16_t kDefaultThreshold = 111; // FIXME
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
@@ -150,14 +159,24 @@ class SensorState {
         ButtonPress(button_num);
         state_ = SensorState::ON;
         last_trigger_ms_ = curMillis;
+        // Light on
         digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, HIGH);
+        // Dom's LED, turn light off
+        leds[2] = CRGB::White;  // up
+        leds[0] = CRGB::Blue;  // underglow
+        FastLED.show();
       }
       
       if (cur_value_ < user_threshold_ - kPaddingWidth &&
           state_ == SensorState::ON) {
         ButtonRelease(button_num);
         state_ = SensorState::OFF;
+        // Light off
         digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, LOW);
+        // Dom's LED, turn light off
+        leds[2] = CRGB::Black;
+        leds[0] = CRGB::Black;
+        FastLED.show();
       }
     }
 
@@ -318,6 +337,10 @@ unsigned long lastSend = 0;
 long loopTime = -1;
 
 void setup() {
+
+  // Add the LEDs
+  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS);
+  
   serialProcessor.Init(kBaudRate);
   ButtonStart();
   for (size_t i = 0; i < kNumSensors; ++i) {
