@@ -30,7 +30,7 @@
 #endif
 
 // Default threshold value for each of the sensors.
-const int16_t kDefaultThreshold = 200;
+const int16_t kDefaultThreshold = 1000;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
@@ -127,11 +127,22 @@ class SensorState {
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(uint8_t button_num, unsigned long curMillis, bool willSend) {
+  void EvaluateSensor(uint8_t button_num, unsigned long curMillis,
+                      bool willSend) {
     int16_t sensor_value = analogRead(pin_value_);
 
-    // Fetch the updated Weighted Moving Average.
-    cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+    // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
+    // since averaging seems to be broken with it. This should also include the
+    // Teensy 2.0 as it's the same board as the Leonardo.
+    // TODO(teejusb): Figure out why and fix. Maybe due to different integer
+    // widths?
+    #if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega328P__) || \
+        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+      cur_value_ = sensor_value - offset_;
+    #else
+      // Fetch the updated Weighted Moving Average.
+      cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+    #endif
 
     if (willSend) {
       if (cur_value_ >= user_threshold_ + kPaddingWidth &&
