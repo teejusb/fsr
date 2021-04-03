@@ -2,10 +2,50 @@
 
 // BEGIN DOM'S FASTLED SETUP
 #include <FastLED.h>
-#define NUM_LEDS 3
+#define NUM_LEDS 10
 #define DATA_PIN 10
 #define CLOCK_PIN 11
 CRGB leds[NUM_LEDS];
+
+// This is a map of panel leds. The order of the array cooresponds to the 
+// button number while the value is the FastLED LED number in the strip.
+// Button numbers start at 1 so 0 isn't used, which is why the underglow is there.
+int16_t PANEL_LED[] = {
+  0,  // Underglow
+  4,  // Left
+  2,  // Up
+  6,  // Down
+  9   // Right
+ };
+
+// Set the color profile for the lights
+// 0 = Test
+// 1 = ITG
+// 2 = DDR
+// 3 = Brazil
+// 4 = Frozen
+int COLOR_PROFILE = 3;
+
+// Idle lights, light up when the panel isn't being pressed
+CRGB IDLE_COLORS[][10] = {
+            // Underglow, Left, Up, Down, Right
+  /* Test   */ {CRGB::Blue, CRGB::Yellow, CRGB::Red, CRGB::Green, CRGB::Purple},
+  /* ITG    */ {CRGB::Blue, CRGB::Blue, CRGB::Red, CRGB::Red, CRGB::Blue},
+  /* DDR    */ {CRGB::Blue, CRGB::SkyBlue, CRGB::Magenta, CRGB::Magenta, CRGB::SkyBlue},
+  /* Brazil */ {CRGB::Blue, CRGB::Yellow, CRGB::Green, CRGB::Green, CRGB::Yellow},
+  /* Frozen */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White},
+};
+
+// Active lights, light up when the panel is pressed
+CRGB ACTIVE_COLORS[][10] = {
+            // Underglow, Left, Up, Down, Right
+  /* Test   */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
+  /* ITG    */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
+  /* DDR    */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
+  /* Brazil */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
+  /* Frozen */ {CRGB::Black, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
+};
+
 // END DOM'S FASTLED SETUP
 
 
@@ -154,6 +194,8 @@ class SensorState {
     #endif
 
     if (willSend) {
+      int16_t panel_led = PANEL_LED[button_num];
+
       if (cur_value_ >= user_threshold_ + kPaddingWidth &&
           state_ == SensorState::OFF) {
         ButtonPress(button_num);
@@ -161,9 +203,10 @@ class SensorState {
         last_trigger_ms_ = curMillis;
         // Light on
         digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, HIGH);
-        // Dom's LED, turn light off
-        leds[2] = CRGB::White;  // up
-        leds[0] = CRGB::Blue;  // underglow
+        // Set panel LED to active color
+        leds[panel_led] = ACTIVE_COLORS[COLOR_PROFILE][button_num];
+        // Do the underglow too
+        leds[0] = ACTIVE_COLORS[COLOR_PROFILE][0];
         FastLED.show();
       }
       
@@ -173,9 +216,10 @@ class SensorState {
         state_ = SensorState::OFF;
         // Light off
         digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, LOW);
-        // Dom's LED, turn light off
-        leds[2] = CRGB::Black;
-        leds[0] = CRGB::Black;
+        // Reset panel LED back to idle color (or off, if black)
+        leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][button_num];
+        // Do the underglow too
+        leds[0] = IDLE_COLORS[COLOR_PROFILE][0];
         FastLED.show();
       }
     }
@@ -339,13 +383,25 @@ long loopTime = -1;
 void setup() {
 
   // Add the LEDs
-  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS);
+  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS);   
+  
+  // Set each light to its idle color on start
+  // ... kNumSensors = number of sensors + 1 (for the underglow)
+  for( size_t k=0; k < (kNumSensors + 1); k++) {
+    int button_num = k;
+    int panel_led = PANEL_LED[button_num];
+    leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][button_num];
+  }
+  
+  FastLED.show();
+
   
   serialProcessor.Init(kBaudRate);
   ButtonStart();
   for (size_t i = 0; i < kNumSensors; ++i) {
     pinMode(i + DIGITAL_PIN_OFFSET, OUTPUT);
   }
+
 }
 
 void loop() {
