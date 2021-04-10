@@ -15,7 +15,12 @@ int16_t PANEL_LED[] = {
   4,  // Left
   2,  // Up
   6,  // Down
-  9   // Right
+  9,  // Right
+  1,  // Up Left
+  3,  // Up Right
+  8,  // Down Right
+  7,  // Center
+  5,  // Down Left
  };
 
 // Set the color profile for the lights
@@ -24,16 +29,21 @@ int16_t PANEL_LED[] = {
 // 2 = DDR
 // 3 = Brazil
 // 4 = Frozen
-int COLOR_PROFILE = 3;
+// 5 = White test
+// 6 = One at a time test
+int COLOR_PROFILE = 5;
 
 // Idle lights, light up when the panel isn't being pressed
 CRGB IDLE_COLORS[][10] = {
-            // Underglow, Left, Up, Down, Right
-  /* Test   */ {CRGB::Blue, CRGB::Yellow, CRGB::Red, CRGB::Green, CRGB::Purple},
+            // Underglow, Left, Up, Down, Right, Up-Left, Up-Right, Down-Right, Center
+  /* Test   */ {CRGB::Blue, CRGB::Yellow, CRGB::Red, CRGB::Green, CRGB::Purple, CRGB::Green, CRGB::Red, CRGB::Red, CRGB::Green, CRGB::Red},
   /* ITG    */ {CRGB::Blue, CRGB::Blue, CRGB::Red, CRGB::Red, CRGB::Blue},
   /* DDR    */ {CRGB::Blue, CRGB::SkyBlue, CRGB::Magenta, CRGB::Magenta, CRGB::SkyBlue},
   /* Brazil */ {CRGB::Blue, CRGB::Yellow, CRGB::Green, CRGB::Green, CRGB::Yellow},
   /* Frozen */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White},
+  /* White  */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White},
+  /* One    */ {CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::White},
+
 };
 
 // Active lights, light up when the panel is pressed
@@ -44,6 +54,8 @@ CRGB ACTIVE_COLORS[][10] = {
   /* DDR    */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
   /* Brazil */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
   /* Frozen */ {CRGB::Black, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
+  /* Frozen */ {CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
+  /* Frozen */ {CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
 };
 
 // END DOM'S FASTLED SETUP
@@ -79,7 +91,7 @@ CRGB ACTIVE_COLORS[][10] = {
 #endif
 
 // Default threshold value for each of the sensors.
-const int16_t kDefaultThreshold = 111; // FIXME
+const int16_t kDefaultThreshold = 1000;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
@@ -286,6 +298,11 @@ SensorState kSensorStates[] = {
   SensorState(A1),
   SensorState(A2),
   SensorState(A3),
+  SensorState(A4),
+  SensorState(A5),
+  SensorState(A6),
+  SensorState(A7),
+  SensorState(A8),
 };
 const size_t kNumSensors = sizeof(kSensorStates)/sizeof(SensorState);
 
@@ -429,4 +446,5 @@ void loop() {
   if (loopTime == -1) {
     loopTime = micros() - startMicros;
   }
+  
 }
