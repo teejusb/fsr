@@ -22,6 +22,8 @@ int16_t PANEL_LED[] = {
   7,  // Center
   5,  // Down Left
  };
+ const size_t kNumLeds = sizeof(PANEL_LED) / sizeof(int16_t);
+
 
 // Set the color profile for the lights
 // 0 = Test
@@ -29,33 +31,45 @@ int16_t PANEL_LED[] = {
 // 2 = DDR
 // 3 = Brazil
 // 4 = Frozen
-// 5 = White test
+// 5 = Italy
 // 6 = One at a time test
-int COLOR_PROFILE = 5;
+// 7 = Princess
+// 8 = Navi
+// 9 = USA
+// 10 = Gadsden
+int COLOR_PROFILE = 10;
 
 // Idle lights, light up when the panel isn't being pressed
 CRGB IDLE_COLORS[][10] = {
-            // Underglow, Left, Up, Down, Right, Up-Left, Up-Right, Down-Right, Center
-  /* Test   */ {CRGB::Blue, CRGB::Yellow, CRGB::Red, CRGB::Green, CRGB::Purple, CRGB::Green, CRGB::Red, CRGB::Red, CRGB::Green, CRGB::Red},
-  /* ITG    */ {CRGB::Blue, CRGB::Blue, CRGB::Red, CRGB::Red, CRGB::Blue},
-  /* DDR    */ {CRGB::Blue, CRGB::SkyBlue, CRGB::Magenta, CRGB::Magenta, CRGB::SkyBlue},
-  /* Brazil */ {CRGB::Blue, CRGB::Yellow, CRGB::Green, CRGB::Green, CRGB::Yellow},
-  /* Frozen */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White},
-  /* White  */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White},
-  /* One    */ {CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::White},
-
+            // Underglow,       Left,             Up,               Down,             Right,            Up-Left,          Up-Right,         Down-Right,       Center,           Down Left
+  /* Test   */ {CRGB::Blue,     CRGB::Gold,       CRGB::Red,        CRGB::Green,      CRGB::Purple,     CRGB::SkyBlue,    CRGB::Blue,       CRGB::Tomato,     CRGB::Green,      CRGB::Pink},
+  /* ITG    */ {CRGB::Blue,     CRGB::Blue,       CRGB::Red,        CRGB::Red,        CRGB::Blue,       CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* DDR    */ {CRGB::Blue,     CRGB::DeepSkyBlue,CRGB::DeepPink,   CRGB::DeepPink,   CRGB::DeepSkyBlue,CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* Brazil */ {CRGB::Blue,     CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,},
+  /* Frozen */ {CRGB::Blue,     CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White},
+  /* Italy  */ {CRGB::Blue,     CRGB::Green,      CRGB::White,      CRGB::White,      CRGB::Red,        CRGB::Green,      CRGB::Red,        CRGB::Red,        CRGB::White,      CRGB::Green},
+  /* One    */ {CRGB::Black,    CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::White},
+  /* Prncss */ {CRGB::Magenta,  CRGB::MediumPurple,CRGB::MediumPurple,CRGB::MediumPurple,CRGB::MediumPurple,CRGB::Magenta,CRGB::Magenta,    CRGB::Magenta,    CRGB::Magenta,    CRGB::Magenta},
+  /* Navi   */ {CRGB::Blue,     CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green},
+  /* USA    */ {CRGB::Blue,     CRGB::Red,        CRGB::Red,        CRGB::Red,        CRGB::Red,        CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue},
+  /* Gadsden*/ {CRGB::Gold,     CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold},
 };
 
 // Active lights, light up when the panel is pressed
+CRGB ALL_WHITE[10] = {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White};
 CRGB ACTIVE_COLORS[][10] = {
-            // Underglow, Left, Up, Down, Right
-  /* Test   */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
-  /* ITG    */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
-  /* DDR    */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
-  /* Brazil */ {CRGB::Blue, CRGB::White, CRGB::White, CRGB::White, CRGB::White}, 
-  /* Frozen */ {CRGB::Black, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
-  /* Frozen */ {CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
-  /* Frozen */ {CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue}, 
+            // Underglow,       Left,             Up,               Down,             Right,            Up-Left,          Up-Right,         Down-Right,       Center,           Down Left
+  /* Test   */ ALL_WHITE, 
+  /* ITG    */ ALL_WHITE, 
+  /* DDR    */ ALL_WHITE, 
+  /* Brazil */ ALL_WHITE, 
+  /* Frozen */ {CRGB::Black,    CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue}, 
+  /* Italy  */ {CRGB::Blue,     CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue}, 
+  /* One    */ ALL_WHITE, 
+  /* Prncss */ {CRGB::Blue,     CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold}, 
+  /* Navi   */ ALL_WHITE, 
+  /* USA    */ ALL_WHITE, 
+  /* Gadsden*/ {CRGB::Gold,     CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black}, 
 };
 
 // END DOM'S FASTLED SETUP
@@ -298,11 +312,11 @@ SensorState kSensorStates[] = {
   SensorState(A1),
   SensorState(A2),
   SensorState(A3),
-  SensorState(A4),
-  SensorState(A5),
-  SensorState(A6),
-  SensorState(A7),
-  SensorState(A8),
+//  SensorState(A4),
+//  SensorState(A5),
+//  SensorState(A6),
+//  SensorState(A7),
+//  SensorState(A8),
 };
 const size_t kNumSensors = sizeof(kSensorStates)/sizeof(SensorState);
 
@@ -400,11 +414,11 @@ long loopTime = -1;
 void setup() {
 
   // Add the LEDs
-  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS);   
+  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS).setCorrection(TypicalSMD5050).setTemperature(CarbonArc);   
   
   // Set each light to its idle color on start
   // ... kNumSensors = number of sensors + 1 (for the underglow)
-  for( size_t k=0; k < (kNumSensors + 1); k++) {
+  for( size_t k=0; k < kNumLeds; k++) {
     int button_num = k;
     int panel_led = PANEL_LED[button_num];
     leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][button_num];
