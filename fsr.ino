@@ -1,5 +1,10 @@
 #include <inttypes.h>
 
+#if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
+    !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
+  #define CAN_AVERAGE
+#endif
+
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
   void ButtonStart() {
@@ -123,7 +128,10 @@ class SensorState {
  public:
   SensorState(uint8_t pin_value) :
       pin_value_(pin_value), state_(SensorState::OFF),
-      user_threshold_(kDefaultThreshold), moving_average_(kWindowSize),
+      user_threshold_(kDefaultThreshold),
+      #if defined(CAN_AVERAGE)
+        moving_average_(kWindowSize),
+      #endif
       offset_(0) {}
 
   // Fetches the sensor value and maybe triggers the button press/release.
@@ -131,17 +139,16 @@ class SensorState {
                       bool willSend) {
     int16_t sensor_value = analogRead(pin_value_);
 
-    // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
-    // since averaging seems to be broken with it. This should also include the
-    // Teensy 2.0 as it's the same board as the Leonardo.
-    // TODO(teejusb): Figure out why and fix. Maybe due to different integer
-    // widths?
-    #if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega328P__) || \
-        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-      cur_value_ = sensor_value - offset_;
-    #else
+    #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
       cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+    #else
+      // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
+      // since averaging seems to be broken with it. This should also include the
+      // Teensy 2.0 as it's the same board as the Leonardo.
+      // TODO(teejusb): Figure out why and fix. Maybe due to different integer
+      // widths?
+      cur_value_ = sensor_value - offset_;
     #endif
 
     if (willSend) {
@@ -202,8 +209,10 @@ class SensorState {
   // TODO(teejusb): Make this a user controllable variable.
   const int16_t kPaddingWidth = 1;
   
+  #if defined(CAN_AVERAGE)
   // The smoothed moving average calculated to reduce some of the noise. 
   HullMovingAverage moving_average_;
+  #endif
 
   // The latest value obtained for this sensor.
   int16_t cur_value_;
