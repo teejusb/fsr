@@ -1,5 +1,10 @@
 #include <inttypes.h>
 
+#if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
+    !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
+  #define CAN_AVERAGE
+#endif
+
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
   void ButtonStart() {
@@ -35,10 +40,28 @@ const int16_t kDefaultThreshold = 1000;
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
 const long kBaudRate = 115200;
+// Max number of sensors per panel.
+// NOTE(teejusb): This is arbitrary, if you need to support more sensors
+// per panel then just change the following number.
+const size_t kMaxSharedSensors = 2;
+// Button numbers should start with 1 (Button0 is not a valid Joystick input).
+// Automatically incremented when creating a new SensorState.
+uint8_t curButtonNum = 1;
+
+/*===========================================================================*/
+
+// EXPERIMENTAL. Used to turn on the lights feature. Note, this might conflict
+// some existing sensor pins so if you see some weird behavior it might be
+// because of this. Uncomment the following line to enable the feature.
+
+// #define ENABLE_LIGHTS
 
 // We don't want to use digital pins 0 and 1 as they're needed for Serial
-// communication.
-#define DIGITAL_PIN_OFFSET 2
+// communication so we start curLightPin from 2.
+// Automatically incremented when creating a new SensorState.
+#if defined(ENABLE_LIGHTS)
+  uint8_t curLightPin = 2;
+#endif
 
 /*===========================================================================*/
 
@@ -91,7 +114,7 @@ class WeightedMovingAverage {
 // input values while still being responsive to input changes.
 //
 // The algorithm is essentially:
-//   1. Calculate WMA of input values with a period of n/2 and multiply it by 2.
+//   1. Calculate WMA of input values with a period of n/2 and double it.
 //   2. Calculate WMA of input values with a period of n and subtract it from
 //      step 1.
 //   3. Calculate WMA of the values from step 2 with a period of sqrt(2).
@@ -118,52 +141,216 @@ class HullMovingAverage {
 
 /*===========================================================================*/
 
-// Class containing all relevant information per sensor.
+// The class that actually evaluates a sensor and actually triggers the button
+// press or release event. If there are multiple sensors added to a
+// SensorState, they will all be evaluated first before triggering the event.
 class SensorState {
  public:
-  SensorState(uint8_t pin_value) :
-      pin_value_(pin_value), state_(SensorState::OFF),
-      user_threshold_(kDefaultThreshold), moving_average_(kWindowSize),
-      offset_(0) {}
+  SensorState()
+      : num_sensors_(0),
+        #if defined(ENABLE_LIGHTS)
+        kLightsPin(curLightPin++),
+        #endif
+        kButtonNum(curButtonNum++) {
+    for (size_t i = 0; i < kMaxSharedSensors; ++i) {
+      sensor_ids_[i] = 0;
+      individual_states_[i] = SensorState::OFF;
+    }
+    #if defined(ENABLE_LIGHTS)
+      pinMode(kLightsPin, OUTPUT);
+    #endif
+  }
+
+  // Adds a new sensor to share this state with. If we try adding a sensor that
+  // we don't have space for, it's essentially dropped.
+  void AddSensor(uint8_t sensor_id) {
+    if (num_sensors_ < kMaxSharedSensors) {
+      sensor_ids_[num_sensors_++] = sensor_id;
+    }
+  }
+
+  // Evaluates a single sensor as part of the shared state.
+  void EvaluateSensor(uint8_t sensor_id,
+                      int16_t cur_value,
+                      int16_t user_threshold) {
+    size_t sensor_index = GetIndexForSensor(sensor_id);
+
+    // The sensor we're evaluating is not part of this shared state.
+    // This should not happen.
+    if (sensor_index == SIZE_MAX) {
+      return;
+    }
+
+    // If we're above the threshold, turn the individual sensor on.
+    if (cur_value >= user_threshold + kPaddingWidth) {
+      individual_states_[sensor_index] = SensorState::ON;
+    }
+
+    // If we're below the threshold, turn the individual sensor off.
+    if (cur_value < user_threshold - kPaddingWidth) {
+      individual_states_[sensor_index] = SensorState::OFF;
+    }
+    
+    // If we evaluated all the sensors this state applies to, only then
+    // should we determine if we want to send a press/release event.
+    bool all_evaluated = (sensor_index == num_sensors_ - 1);
+
+    if (all_evaluated) {
+      switch (combined_state_) {
+        case SensorState::OFF:
+          {
+            // If ANY of the sensors triggered, then we trigger a button press.
+            bool turn_on = false;
+            for (size_t i = 0; i < num_sensors_; ++i) {
+              if (individual_states_[i] == SensorState::ON) {
+                turn_on = true;
+                break;
+              }
+            }
+            if (turn_on) {
+              ButtonPress(kButtonNum);
+              combined_state_ = SensorState::ON;
+              #if defined(ENABLE_LIGHTS)
+                digitalWrite(kLightsPin, HIGH);
+              #endif
+            }
+          }
+          break;
+        case SensorState::ON:
+          {
+            // ALL of the sensors must be off to trigger a release.
+            // i.e. If any of them are ON we do not release.
+            bool turn_off = true;
+            for (size_t i = 0; i < num_sensors_; ++i) {
+              if (individual_states_[i] == SensorState::ON) {
+                turn_off = false;
+              }
+            }
+            if (turn_off) {
+              ButtonRelease(kButtonNum);
+              combined_state_ = SensorState::OFF;
+              #if defined(ENABLE_LIGHTS)
+                digitalWrite(kLightsPin, LOW);
+              #endif
+            }
+          }
+          break;
+      }
+    }
+  }
+
+  // Given a sensor_id, returns the index in the sensor_ids_ array.
+  // Returns SIZE_MAX if not found.
+  size_t GetIndexForSensor(uint8_t sensor_id) {
+    for (size_t i = 0; i < num_sensors_; ++i) {
+      if (sensor_ids_[i] == sensor_id) {
+        return i;
+      }
+    }
+    return SIZE_MAX;
+  }
+
+ private:
+  // The collection of sensors shared with this state.
+  uint8_t sensor_ids_[kMaxSharedSensors];
+  // The number of sensors this state combines with.
+  size_t num_sensors_;
+
+  // Used to determine the state of each individual sensor, as well as
+  // the aggregated state.
+  enum State { OFF, ON };
+  // The evaluated state for each individual sensor.
+  State individual_states_[kMaxSharedSensors];
+  // The aggregated state.
+  State combined_state_ = SensorState::OFF;
+
+  // One-tailed width size to create a window around user_threshold to
+  // mitigate fluctuations by noise. 
+  // TODO(teejusb): Make this a user controllable variable.
+  const int16_t kPaddingWidth = 1;
+
+  // The light pin this state corresponds to.
+  #if defined(ENABLE_LIGHTS)
+    const uint8_t kLightsPin;
+  #endif
+
+  // The button number this state corresponds to.
+  const uint8_t kButtonNum;
+};
+
+/*===========================================================================*/
+
+// Class containing all relevant information per sensor.
+class Sensor {
+ public:
+  Sensor(uint8_t pin_value, SensorState* sensor_state = nullptr)
+      : initialized_(false), pin_value_(pin_value),
+        user_threshold_(kDefaultThreshold),
+        #if defined(CAN_AVERAGE)
+          moving_average_(kWindowSize),
+        #endif
+        offset_(0), sensor_state_(sensor_state),
+        should_delete_state_(false) {}
+  
+  ~Sensor() {
+    if (should_delete_state_) {
+      delete sensor_state_;
+    }
+  }
+
+  void Init(uint8_t sensor_id) {
+    // Sensor should only be initialized once.
+    if (initialized_) {
+      return;
+    }
+    // Sensor IDs should be 1-indexed thus they must be non-zero.
+    if (sensor_id == 0) {
+      return;
+    }
+
+    // There is no state for this sensor, create one.
+    if (sensor_state_ == nullptr) {
+      sensor_state_ = new SensorState();
+      // If this sensor created the state, then it's in charge of deleting it.
+      should_delete_state_ = true;
+    }
+
+    // If this sensor hasn't been added to the state, then try adding it.
+    if (sensor_state_->GetIndexForSensor(sensor_id) == SIZE_MAX) {
+      sensor_state_->AddSensor(sensor_id);
+    }
+    sensor_id_ = sensor_id;
+    initialized_ = true;
+  }
 
   // Fetches the sensor value and maybe triggers the button press/release.
-  void EvaluateSensor(uint8_t button_num, unsigned long curMillis,
-                      bool willSend) {
+  void EvaluateSensor(bool willSend) {
+    if (!initialized_) {
+      return;
+    }
+    // If this sensor was never added to the state, then return early.
+    if (sensor_state_->GetIndexForSensor(sensor_id_) == SIZE_MAX) {
+      return;
+    }
+
     int16_t sensor_value = analogRead(pin_value_);
 
-    // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
-    // since averaging seems to be broken with it. This should also include the
-    // Teensy 2.0 as it's the same board as the Leonardo.
-    // TODO(teejusb): Figure out why and fix. Maybe due to different integer
-    // widths?
-    #if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega328P__) || \
-        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-      cur_value_ = sensor_value - offset_;
-    #else
+    #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
       cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+    #else
+      // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
+      // since averaging seems to be broken with it. This should also include
+      // the Teensy 2.0 as it's the same board as the Leonardo.
+      // TODO(teejusb): Figure out why and fix. Maybe due to different integer
+      // widths?
+      cur_value_ = sensor_value - offset_;
     #endif
 
     if (willSend) {
-      if (cur_value_ >= user_threshold_ + kPaddingWidth &&
-          state_ == SensorState::OFF) {
-        ButtonPress(button_num);
-        state_ = SensorState::ON;
-        last_trigger_ms_ = curMillis;
-        digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, HIGH);
-      }
-      
-      if (cur_value_ < user_threshold_ - kPaddingWidth &&
-          state_ == SensorState::ON) {
-        ButtonRelease(button_num);
-        state_ = SensorState::OFF;
-        digitalWrite(button_num - 1 + DIGITAL_PIN_OFFSET, LOW);
-      }
+      sensor_state_->EvaluateSensor(
+        sensor_id_, cur_value_, user_threshold_);
     }
-
-//    if (state_ == SensorState::OFF && curMillis - last_trigger_ms_ >= 3000) {
-//      UpdateOffset();
-//    }
   }
 
   void UpdateThreshold(int16_t new_threshold) {
@@ -187,44 +374,64 @@ class SensorState {
   }
 
   // Delete default constructor. Pin number MUST be explicitly specified.
-  SensorState() = delete;
+  Sensor() = delete;
  
  private:
+  // Ensures that Init() has been called at exactly once on this Sensor.
+  bool initialized_;
   // The pin on the Teensy/Arduino corresponding to this sensor.
   uint8_t pin_value_;
-  // The current joystick state of the sensor.
-  enum State { OFF, ON };
-  State state_;
+
   // The user defined threshold value to activate/deactivate this sensor at.
   int16_t user_threshold_;
-  // One-tailed width size to create a window around user_threshold_ to
-  // mitigate fluctuations by noise. 
-  // TODO(teejusb): Make this a user controllable variable.
-  const int16_t kPaddingWidth = 1;
   
+  #if defined(CAN_AVERAGE)
   // The smoothed moving average calculated to reduce some of the noise. 
   HullMovingAverage moving_average_;
+  #endif
 
   // The latest value obtained for this sensor.
   int16_t cur_value_;
   // How much to shift the value read by during each read.
   int16_t offset_;
-  // Timestamp of when the last time this sensor was triggered.
-  unsigned long last_trigger_ms_ = 0;
+
+  // Since many sensors may refer to the same input this may be shared among
+  // other sensors.
+  SensorState* sensor_state_;
+  // Used to indicate if the state is owned by this instance, or if it was
+  // passed in from outside
+  bool should_delete_state_;
+
+  // A unique number corresponding to this sensor. Set during Init().
+  uint8_t sensor_id_;
 };
 
 /*===========================================================================*/
 
 // Defines the sensor collections and sets the pins for them appropriately.
-// NOTE(teejusb): These may need to be changed depending on the pins users
-// connect their FSRs to.
-SensorState kSensorStates[] = {
-  SensorState(A0),
-  SensorState(A1),
-  SensorState(A2),
-  SensorState(A3),
+//
+// If you want to use multiple sensors in one panel, you will want to share
+// state across them. In the following example, the first and second sensors
+// share state. The maximum number of sensors that can be shared for one panel
+// is controlled by the kMaxSharedSensors constant at the top of this file, but
+// can be modified as needed.
+//
+// SensorState state1;
+// Sensor kSensors[] = {
+//   Sensor(A0, &state1),
+//   Sensor(A1, &state1),
+//   Sensor(A2),
+//   Sensor(A3),
+//   Sensor(A4),
+// };
+
+Sensor kSensors[] = {
+  Sensor(A0),
+  Sensor(A1),
+  Sensor(A2),
+  Sensor(A3),
 };
-const size_t kNumSensors = sizeof(kSensorStates)/sizeof(SensorState);
+const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
 /*===========================================================================*/
 
@@ -273,14 +480,14 @@ class SerialProcessor {
     size_t sensor_index = buffer_[0] - '0';
     if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
 
-    kSensorStates[sensor_index].UpdateThreshold(
+    kSensors[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
     PrintThresholds();
   }
 
   void UpdateOffsets() {
     for (size_t i = 0; i < kNumSensors; ++i) {
-      kSensorStates[i].UpdateOffset();
+      kSensors[i].UpdateOffset();
     }
   }
 
@@ -288,7 +495,7 @@ class SerialProcessor {
     Serial.print("v");
     for (size_t i = 0; i < kNumSensors; ++i) {
       Serial.print(" ");
-      Serial.print(kSensorStates[i].GetCurValue());
+      Serial.print(kSensors[i].GetCurValue());
     }
     Serial.print("\n");
   }
@@ -297,7 +504,7 @@ class SerialProcessor {
     Serial.print("t");
     for (size_t i = 0; i < kNumSensors; ++i) {
       Serial.print(" ");
-      Serial.print(kSensorStates[i].GetThreshold());
+      Serial.print(kSensors[i].GetThreshold());
     }
     Serial.print("\n");
   }
@@ -321,7 +528,8 @@ void setup() {
   serialProcessor.Init(kBaudRate);
   ButtonStart();
   for (size_t i = 0; i < kNumSensors; ++i) {
-    pinMode(i + DIGITAL_PIN_OFFSET, OUTPUT);
+    // Button numbers should start with 1.
+    kSensors[i].Init(i + 1);
   }
 }
 
@@ -335,9 +543,8 @@ void loop() {
 
   serialProcessor.CheckAndMaybeProcessData();
 
-  unsigned long curMillis = millis();  
   for (size_t i = 0; i < kNumSensors; ++i) {
-    kSensorStates[i].EvaluateSensor(i + 1, curMillis, willSend);
+    kSensors[i].EvaluateSensor(willSend);
   }
 
   if (willSend) {

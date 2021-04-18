@@ -50,12 +50,13 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
     - You also may need to [modify](https://github.com/teejusb/fsr/pull/1#discussion_r514585060) the `sensor_numbers` variable.
 1. Open a command prompt (or terminal) and navigate to `./webui/server` with `cd webui/server`
 1. Run `python -m venv venv` (on Windows you may need to replace `python` with `py`)
-1. Run `venv\Scripts\activate`
+1. Run `venv\Scripts\activate` (on Linux you run `source venv/bin/activate`)
 1. Run `pip install -r requirements.txt` to install dependencies
 1. Then move to the `./webui` directory by doing `cd ..`
 1. Run `yarn install && yarn build && yarn start-api`
+    - On Linux, you'll also need to edit the `start-api` script in `./webui/package.json` to reference `venv/bin/flask` instead of `venv/Scripts/flask`
 
-The UI should be up and running on http://localhost:3000 and you can use your device IP and the port to reach it from your phone (e.g. http://192.168.0.xxx:5000 )
+The UI should be up and running on http://localhost:5000 and you can use your device IP and the port to reach it from your phone (e.g. http://192.168.0.xxx:5000 )
 
 
 ## Troubleshooting 

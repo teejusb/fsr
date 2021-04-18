@@ -2,7 +2,7 @@ click==7.1.2
 Flask==1.1.2
 Flask-SocketIO==4.3.1
 itsdangerous==1.1.0
-Jinja2==2.11.2
+Jinja2==2.11.3
 MarkupSafe==1.1.1
 pyserial==3.4
 python-dotenv==0.14.0
