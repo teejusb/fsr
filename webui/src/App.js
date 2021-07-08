@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import io from 'socket.io-client';
 
 import logo from './logo.svg';
 import './App.css';
@@ -22,8 +21,6 @@ import {
   Link
 } from "react-router-dom";
 
-const socket = io({transport: ["websocket"]});
-
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
 let kCurThresholds = [0, 0, 0, 0];
@@ -35,19 +32,64 @@ let kCurValues = [[0, 0, 0, 0]]
 const max_size = 1000;
 let oldest = 0;
 
-// Add the appropriate socket handlers for the above two globals.
-socket.on('get_values', function(msg) {
+var ws;
+const wsCallbacks = {};
+const wsQueue = [];
+
+function connect() {
+  ws = new WebSocket('ws://' + window.location.host + '/ws');
+
+  ws.addEventListener('open', function(ev) {
+    while (wsQueue.length > 0 && ws.readyState === 1) {
+      let msg = wsQueue.shift();
+      ws.send(JSON.stringify(msg));
+    }
+  });
+
+  ws.addEventListener('error', function(ev) {
+    ws.close();
+  });
+
+  ws.addEventListener('close', function(ev) {
+    setTimeout(connect, 1000);
+  });
+
+  ws.addEventListener('message', function(ev) {
+    const data = JSON.parse(ev.data)
+    const action = data[0];
+    const msg = data[1];
+
+    if (wsCallbacks[action]) {
+      wsCallbacks[action](msg);
+    }
+  });
+}
+
+function emit(msg) {
+  // Queue the message if the websocket connection is not ready yet.
+  // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
+  if (ws.readyState !== 1 /* OPEN */) {
+    wsQueue.push(ws);
+    return;
+  }
+
+  ws.send(JSON.stringify(msg));
+}
+
+wsCallbacks.values = function(msg) {
   if (kCurValues.length < max_size) {
     kCurValues.push(msg.values);
   } else {
     kCurValues[oldest] = msg.values;
     oldest = (oldest + 1) % max_size;
   }
-});
+};
 
-socket.on('thresholds', function(msg) {
+wsCallbacks.thresholds = function(msg) {
   kCurThresholds = msg.thresholds;
-});
+};
+
+connect();
 
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
@@ -62,7 +104,7 @@ function ValueMonitor(props) {
     // the server restarts where it would be nicer to have all the values in sync.
     // Still send back the index since we want to update only one value at a time
     // to the microcontroller.
-    socket.emit('update_threshold', kCurThresholds, index);
+    emit(['update_threshold', kCurThresholds, index]);
   }
 
   function Decrement(e) {
@@ -85,6 +127,7 @@ function ValueMonitor(props) {
     let requestId;
 
     const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
 
     function getMousePos(canvas, e) {
       const rect = canvas.getBoundingClientRect();
@@ -145,22 +188,32 @@ function ValueMonitor(props) {
       }
     });
 
-    const render = () => {
-      // ********** Canvas setup **********
-      // This has to be here in case the user resizes the window.
+    const setDimensions = () => {
       // Adjust DPI so that all the edges are smooth during scaling.
       const dpi = window.devicePixelRatio || 1;
-      const style = {
-        height() {
-          return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
-        },
-        width() {
-          return +getComputedStyle(canvas).getPropertyValue('width').slice(0,-2);
-        }
+
+      canvas.width = canvas.clientWidth * dpi;
+      canvas.height = canvas.clientHeight * dpi;
+    };
+
+    setDimensions();
+    window.addEventListener('resize', setDimensions);
+
+    // This is default React CSS font style.
+    const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
+    const valueLabel = valueLabelRef.current;
+    const thresholdLabel = thresholdLabelRef.current;
+
+    // cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact)
+    const minFrameDurationMs = 1000 / 60.1;
+    var previousTimestamp;
+
+    const render = (timestamp) => {
+      if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
+        requestId = requestAnimationFrame(render);
+        return;
       }
-      canvas.setAttribute('width', style.width() * dpi);
-      canvas.setAttribute('height', style.height() * dpi);
-      // **********************************
+      previousTimestamp = timestamp;
 
       // Get the latest value. This is either last element in the list, or based off of
       // the circular array.
@@ -172,7 +225,6 @@ function ValueMonitor(props) {
       }
 
       // Add background fill.
-      const ctx = canvas.getContext('2d');
       let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
       if (currentValue >= kCurThresholds[index]) {
         grd.addColorStop(0, 'lightblue');
@@ -185,12 +237,11 @@ function ValueMonitor(props) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Cur Value Label
-      const valueLabel = valueLabelRef.current;
-      valueLabel.innerHTML = currentValue;
+      valueLabel.innerText = currentValue;
 
       // Bar
       const maxHeight = canvas.height;
-      const position = maxHeight - currentValue/1023 * maxHeight;
+      const position = Math.round(maxHeight - currentValue/1023 * maxHeight);
       grd = ctx.createLinearGradient(canvas.width/2, canvas.height, canvas.width/2, position);
       grd.addColorStop(0, 'orange');
       grd.addColorStop(1, 'red');
@@ -204,10 +255,7 @@ function ValueMonitor(props) {
       ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2), canvas.width, threshold_height);
 
       // Threshold Label
-      const thresholdLabel = thresholdLabelRef.current;
-      thresholdLabel.innerHTML = kCurThresholds[index];
-      // This is default React CSS font style.
-      const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
+      thresholdLabel.innerText = kCurThresholds[index];
       ctx.font = "30px " + bodyFontFamily;
       ctx.fillStyle = "black";
       if (kCurThresholds[index] > 990) {
@@ -224,6 +272,7 @@ function ValueMonitor(props) {
 
     return () => {
       cancelAnimationFrame(requestId);
+      window.removeEventListener('resize', setDimensions);
     };
   // Intentionally disable the lint errors.
   // EmitValue and index don't need to be in the dependency list as we only want this to 
@@ -270,26 +319,42 @@ function Plot() {
   useEffect(() => {
     let requestId;
     const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
 
-    const render = () => {
-      // ********** Canvas setup **********
-      // This has to be here in case the user resizes the window.
+    const setDimensions = () => {
       // Adjust DPI so that all the edges are smooth during scaling.
-      const dpi = window.devicePixelRatio;
-      const style = {
-        height() {
-          return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
-        },
-        width() {
-          return +getComputedStyle(canvas).getPropertyValue('width').slice(0,-2);
-        }
+      const dpi = window.devicePixelRatio || 1;
+
+      canvas.width = canvas.clientWidth * dpi;
+      canvas.height = canvas.clientHeight * dpi;
+    };
+
+    setDimensions();
+    window.addEventListener('resize', setDimensions);
+
+    // This is default React CSS font style.
+    const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
+
+    function drawDashedLine(pattern, spacing, y, width) {
+      ctx.beginPath();
+      ctx.setLineDash(pattern);
+      ctx.moveTo(spacing, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact)
+    const minFrameDurationMs = 1000 / 60.1;
+    var previousTimestamp;
+
+    const render = (timestamp) => {
+      if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
+        requestId = requestAnimationFrame(render);
+        return;
       }
-      canvas.setAttribute('width', style.width() * dpi);
-      canvas.setAttribute('height', style.height() * dpi);
-      // **********************************
+      previousTimestamp = timestamp;
 
       // Add background fill.
-      const ctx = canvas.getContext('2d');
       let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
       grd.addColorStop(0, 'white');
       grd.addColorStop(1, 'lightgray');
@@ -304,20 +369,12 @@ function Plot() {
       ctx.rect(spacing, spacing, box_width, box_height);
       ctx.stroke();
 
-      function drawDashedLine(ctx, pattern, spacing, y, width) {
-        ctx.beginPath();
-        ctx.setLineDash(pattern);
-        ctx.moveTo(spacing, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-
       // Draw the divisions in the plot.
       // Major Divisions will be 2 x minor_divison.
       const minor_division = 100;
       for (let i = 1; i*minor_division < 1023; ++i) {
         const pattern = i % 2 === 0 ? [20, 5] : [5, 10];
-        drawDashedLine(ctx, pattern, spacing,
+        drawDashedLine(pattern, spacing,
           box_height-(box_height * (i*minor_division)/1023) + spacing, box_width + spacing);
       }
 
@@ -357,8 +414,6 @@ function Plot() {
       }
 
       // Display the current value for each of the sensors.
-      // This is default React CSS font style.
-      const bodyFontFamily = window.getComputedStyle(document.body).getPropertyValue("font-family");
       ctx.font = "30px " + bodyFontFamily;
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
@@ -379,6 +434,7 @@ function Plot() {
 
     return () => {
       cancelAnimationFrame(requestId);
+      window.removeEventListener('resize', setDimensions);
     };
   }, [colors, display]);
 
@@ -438,23 +494,23 @@ function App() {
       });
     }
 
-    socket.on('get_profiles', function(msg) {
+    wsCallbacks.get_profiles = function(msg) {
       setProfiles(msg.profiles);
-    });
-    socket.on('get_cur_profile', function(msg) {
+    };
+    wsCallbacks.get_cur_profile = function(msg) {
       setActiveProfile(msg.cur_profile);
-    });
+    };
 
     return () => {
-      socket.off('get_profiles');
-      socket.off('get_cur_profile');
+      delete wsCallbacks.get_profiles;
+      delete wsCallbacks.get_cur_profile;
     };
   }, [fetched, profiles, activeProfile]);
 
   function AddProfile(e) {
     // Only add a profile on the enter key.
     if (e.keyCode === 13) {
-      socket.emit('add_profile', e.target.value, kCurThresholds);
+      emit(['add_profile', e.target.value, kCurThresholds]);
       // Reset the text box.
       e.target.value = "";
     }
@@ -464,13 +520,13 @@ function App() {
   function RemoveProfile(e) {
     // Strip out the "X " added by the button.
     const profile_name = e.target.parentNode.innerText.replace('X ', '');
-    socket.emit('remove_profile', profile_name);
+    emit(['remove_profile', profile_name]);
   }
 
   function ChangeProfile(e) {
     // Strip out the "X " added by the button.
     const profile_name = e.target.innerText.replace('X ', '');
-    socket.emit('change_profile', profile_name);
+    emit(['change_profile', profile_name]);
   }
 
   // Don't render anything until the defaults are fetched.
