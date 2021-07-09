@@ -328,7 +328,7 @@ def broadcast(msg):
     for q in out_queues:
       try:
         main_thread_loop.call_soon_threadsafe(q.put_nowait, msg)
-      except asyncio.QueueFull:
+      except asyncio.queues.QueueFull:
         pass
 
 
