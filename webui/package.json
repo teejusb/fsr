@@ -16,7 +16,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "start-api": "cd server && venv/Scripts/flask run --host=0.0.0.0 --no-debugger",
+    "start-api": "cd server && venv/Scripts/python server.py",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
