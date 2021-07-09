@@ -179,8 +179,9 @@ class SerialHandler(object):
         for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
           threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
           self.write_queue.put(threshold_cmd, block=False)
-
-    except Exception as e:
+    except queue.Full as e:
+      logger.error('Could not set thresholds. Queue full.')
+    except serial.SerialException as e:
       self.ser = None
       logger.exception('Error opening serial: %s', e)
 
