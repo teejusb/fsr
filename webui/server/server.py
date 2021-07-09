@@ -239,6 +239,8 @@ class SerialHandler(object):
             ProcessValues(values)
           elif cmd == 't':
             ProcessThresholds(values)
+        except queue.Full as e:
+          logger.error('Could not fetch new values. Queue full.')
         except serial.SerialException as e:
           logger.error('Error reading data: ', e)
           self.Open()
