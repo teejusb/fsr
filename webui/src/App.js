@@ -21,20 +21,31 @@ import {
   Link
 } from "react-router-dom";
 
+// Amount of panels.
+let panels = 4
+
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
-let kCurThresholds = [0, 0, 0, 0];
+let kCurThresholds = init_array(panels);
 
 // A history of the past 'max_size' values fetched from the backend.
 // Used for plotting and displaying live values.
 // We use a cyclical array to save memory.
-let kCurValues = [[0, 0, 0, 0]]
+let kCurValues = [init_array(panels)]
 const max_size = 1000;
 let oldest = 0;
 
 var ws;
 const wsCallbacks = {};
 const wsQueue = [];
+
+function init_array(length) {
+  let temp = new Array(length);
+  for (var i = 0; i < temp.length; i++) {
+    temp[i] = 0;
+  }
+  return temp;
+}
 
 function connect() {
   ws = new WebSocket('ws://' + window.location.host + '/ws');
