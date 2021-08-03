@@ -16,7 +16,7 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "COM3"
 HTTP_PORT = 5000
 
 # Threads for the serial reader and writer.
@@ -24,11 +24,21 @@ read_thread = None
 write_thread = None
 thread_stop_event = threading.Event()
 
+def init_list(length, incremental = False):
+	temp = []
+	if incremental == False:
+		for i in range(length):
+			temp.append(0)
+	else:
+		for i in range(length):
+			temp.append(i)
+	return temp
+
 # Amount of PANELS.
 sensors = 4
 
 # Initialize panel ids
-sensor_numbers = init_list(sensors, true)
+sensor_numbers = init_list(sensors, True)
 
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
@@ -52,7 +62,6 @@ class ProfileHandler(object):
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
     self.profiles[''] = init_list(sensors)
-    init_list(self.profiles, sensors)
     self.loaded = False
 
   def MaybeLoad(self):
@@ -431,17 +440,6 @@ build_dir = os.path.abspath(
 
 async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
-
-
-def init_list(length, incremental = false):
-	temp = []
-	if incremental == false:
-		for i in range(length):
-			temp.append(0)
-	else:
-		for i in range(length):
-			temp.append(i)
-	return temp
 
 
 app = web.Application()
