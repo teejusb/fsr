@@ -24,7 +24,7 @@ read_thread = None
 write_thread = None
 thread_stop_event = threading.Event()
 
-# Amount of num_panels.
+# Amount of panels.
 num_panels = 4
 
 # Initialize panel ids.
