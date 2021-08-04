@@ -22,7 +22,8 @@ import {
 } from "react-router-dom";
 
 // Amount of panels.
-let panels = 4
+let panels = 5;
+let panel_indexes = init_array(panels, true);
 
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
@@ -31,7 +32,7 @@ let kCurThresholds = init_array(panels);
 // A history of the past 'max_size' values fetched from the backend.
 // Used for plotting and displaying live values.
 // We use a cyclical array to save memory.
-let kCurValues = [init_array(panels)]
+let kCurValues = [init_array(panels)];
 const max_size = 1000;
 let oldest = 0;
 
@@ -39,10 +40,17 @@ var ws;
 const wsCallbacks = {};
 const wsQueue = [];
 
-function init_array(length) {
+function init_array(length, incremental = false) {
   let temp = new Array(length);
-  for (var i = 0; i < temp.length; i++) {
+  if(incremental == false) {
+  	for (var i = 0; i < temp.length; i++) {
     temp[i] = 0;
+  	}
+  }
+  else {
+  	for (var i = 0; i < temp.length; i++) {
+    temp[i] = i;
+  	}
   }
   return temp;
 }
@@ -312,10 +320,9 @@ function WebUI() {
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          <ValueMonitor index="0"/>
-          <ValueMonitor index="1"/>
-          <ValueMonitor index="2"/>
-          <ValueMonitor index="3"/>
+          {panel_indexes.map(value_monitor => (
+          	<ValueMonitor index={value_monitor}/>)
+          )}
         </Row>
       </Container>
     </header>
