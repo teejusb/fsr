@@ -39,21 +39,6 @@ var ws;
 const wsCallbacks = {};
 const wsQueue = [];
 
-function init_array(length, incremental = false) {
-  let temp = new Array(length);
-  if(incremental == false) {
-  	for (var i = 0; i < temp.length; i++) {
-    temp[i] = 0;
-  	}
-  }
-  else {
-  	for (var i = 0; i < temp.length; i++) {
-    temp[i] = i;
-  	}
-  }
-  return temp;
-}
-
 function connect() {
   ws = new WebSocket('ws://' + window.location.host + '/ws');
 
