@@ -22,17 +22,16 @@ import {
 } from "react-router-dom";
 
 // Amount of panels.
-let panels = 4;
-let panel_indexes = init_array(panels, true);
+const num_panels = 4;
 
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
-let kCurThresholds = init_array(panels);
+let kCurThresholds = new Array(num_panels).fill(0);
 
 // A history of the past 'max_size' values fetched from the backend.
 // Used for plotting and displaying live values.
 // We use a cyclical array to save memory.
-let kCurValues = [init_array(panels)];
+let kCurValues = [new Array(num_panels).fill(0)];
 const max_size = 1000;
 let oldest = 0;
 
@@ -320,7 +319,7 @@ function WebUI() {
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          {panel_indexes.map(value_monitor => (
+          {[...Array(num_panels).keys()].map(value_monitor => (
           	<ValueMonitor index={value_monitor}/>)
           )}
         </Row>

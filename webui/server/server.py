@@ -16,7 +16,7 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "COM3"
+SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
 # Threads for the serial reader and writer.
@@ -24,21 +24,11 @@ read_thread = None
 write_thread = None
 thread_stop_event = threading.Event()
 
-def init_list(length, incremental = False):
-	temp = []
-	if incremental == False:
-		for i in range(length):
-			temp.append(0)
-	else:
-		for i in range(length):
-			temp.append(i)
-	return temp
-
-# Amount of panels.
-panels = 4
+# Amount of num_panels.
+num_panels = 4
 
 # Initialize panel ids.
-sensor_numbers = init_list(panels, True)
+sensor_numbers = range(num_panels)
 
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
@@ -61,7 +51,7 @@ class ProfileHandler(object):
     self.profiles = OrderedDict()
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = init_list(panels)
+    self.profiles[''] = [0] * num_panels
     self.loaded = False
 
   def MaybeLoad(self):
@@ -71,7 +61,7 @@ class ProfileHandler(object):
         with open(self.filename, 'r') as f:
           for line in f:
             parts = line.split()
-            if len(parts) == (panels+1):
+            if len(parts) == (num_panels+1):
               self.profiles[parts[0]] = [int(x) for x in parts[1:]]
               num_profiles += 1
               # Change to the first profile found.
@@ -116,7 +106,7 @@ class ProfileHandler(object):
   def AddProfile(self, profile_name, thresholds):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
-      self.profiles[''] = init_list(panels)
+      self.profiles[''] = [0] * num_panels
     # ChangeProfile emits 'thresholds' and 'cur_profile'
     self.ChangeProfile(profile_name)
     with open(self.filename, 'w') as f:
@@ -168,7 +158,7 @@ class SerialHandler(object):
 
     # Use this to store the values when emulating serial so the graph isn't too
     # jumpy. Only used when NO_SERIAL is true.
-    self.no_serial_values = init_list(panels)
+    self.no_serial_values = [0] * num_panels
 
   def ChangePort(self, port):
     if self.ser:
@@ -202,7 +192,7 @@ class SerialHandler(object):
     def ProcessValues(values):
       # Fix our sensor ordering.
       actual = []
-      for i in range(panels):
+      for i in range(num_panels):
         actual.append(values[sensor_numbers[i]])
       broadcast(['values', {'values': actual}])
       time.sleep(0.01)
@@ -211,7 +201,7 @@ class SerialHandler(object):
       cur_thresholds = self.profile_handler.GetCurThresholds()
       # Fix our sensor ordering.
       actual = []
-      for i in range(panels):
+      for i in range(num_panels):
         actual.append(values[sensor_numbers[i]])
       for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
         if cur != act:
@@ -219,10 +209,10 @@ class SerialHandler(object):
 
     while not thread_stop_event.isSet():
       if NO_SERIAL:
-        offsets = [int(normalvariate(0, panels+1)) for _ in range(panels)]
+        offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
         self.no_serial_values = [
           max(0, min(self.no_serial_values[i] + offsets[i], 1023))
-          for i in range(panels)
+          for i in range(num_panels)
         ]
         broadcast(['values', {'values': self.no_serial_values}])
         time.sleep(0.01)
@@ -244,7 +234,7 @@ class SerialHandler(object):
           # All commands are of the form:
           #   cmd num1 num2 num3 num4
           parts = line.split()
-          if len(parts) != panels+1:
+          if len(parts) != num_panels+1:
             continue
           cmd = parts[0]
           values = [int(x) for x in parts[1:]]
