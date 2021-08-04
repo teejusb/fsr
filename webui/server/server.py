@@ -35,7 +35,7 @@ def init_list(length, incremental = False):
 	return temp
 
 # Amount of panels.
-panels = 5
+panels = 4
 
 # Initialize panel ids.
 sensor_numbers = init_list(panels, True)

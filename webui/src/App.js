@@ -22,7 +22,7 @@ import {
 } from "react-router-dom";
 
 // Amount of panels.
-let panels = 5;
+let panels = 4;
 let panel_indexes = init_array(panels, true);
 
 // Keep track of the current thresholds fetched from the backend.
