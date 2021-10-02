@@ -133,6 +133,9 @@ class HullMovingAverage {
     return hull_value;
   }
 
+  // Delete default constructor. Size MUST be explicitly specified.
+  HullMovingAverage() = delete;
+
  private:
   WeightedMovingAverage wma1_;
   WeightedMovingAverage wma2_;
