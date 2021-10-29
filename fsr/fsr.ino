@@ -1,9 +1,13 @@
+#include "FastADC.h"
 #include <inttypes.h>
 
 #if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
     !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
   #define CAN_AVERAGE
+  #define FASTADC 1
 #endif
+
+
 
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
@@ -534,6 +538,7 @@ void setup() {
     // Button numbers should start with 1.
     kSensors[i].Init(i + 1);
   }
+  SetFastADC();
 }
 
 void loop() {
