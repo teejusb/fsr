@@ -483,9 +483,11 @@ class SerialProcessor {
     // e.g. 3180 (fourth FSR, change threshold to 180)
     
     if (bytes_read < 2 || bytes_read > 5) { return; }
-
+    
     size_t sensor_index = buffer_[0] - '0';
-    if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
+    //this works for chars < '0' because they will
+    //also be > kNumSensors due to uint underflow.
+    if (sensor_index >= kNumSensors) { return; }
 
     kSensors[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
