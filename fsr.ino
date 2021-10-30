@@ -1,12 +1,14 @@
-#include "FastADC.h"
 #include <inttypes.h>
 
 #if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
     !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
   #define CAN_AVERAGE
-  #define FASTADC 1
 #endif
 
+#if defined(_SFR_BYTE) && defined(_BV) && defined(ADCSRA)
+  #define CLEAR_BIT(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+  #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
 
 
 #ifdef CORE_TEENSY
@@ -540,7 +542,15 @@ void setup() {
     // Button numbers should start with 1.
     kSensors[i].Init(i + 1);
   }
-  SetFastADC();
+  
+  #if defined(CLEAR_BIT) && defined(SET_BIT)
+	  // Set the ADC prescaler to 16 for boards that support it,
+	  // which is a good balance between speed and accuracy.
+	  // More information can be found here: http://www.gammon.com.au/adc
+	  SET_BIT(ADCSRA, ADPS2);
+	  CLEAR_BIT(ADCSRA, ADPS1);
+	  CLEAR_BIT(ADCSRA, ADPS0);
+  #endif
 }
 
 void loop() {
