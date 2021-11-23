@@ -5,6 +5,12 @@
   #define CAN_AVERAGE
 #endif
 
+#if defined(_SFR_BYTE) && defined(_BV) && defined(ADCSRA)
+  #define CLEAR_BIT(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+  #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
+
+
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
   void ButtonStart() {
@@ -479,9 +485,11 @@ class SerialProcessor {
     // e.g. 3180 (fourth FSR, change threshold to 180)
     
     if (bytes_read < 2 || bytes_read > 5) { return; }
-
+    
     size_t sensor_index = buffer_[0] - '0';
-    if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
+    //this works for chars < '0' because they will
+    //also be > kNumSensors due to uint underflow.
+    if (sensor_index >= kNumSensors) { return; }
 
     kSensors[sensor_index].UpdateThreshold(
         strtoul(buffer_ + 1, nullptr, 10));
@@ -534,6 +542,15 @@ void setup() {
     // Button numbers should start with 1.
     kSensors[i].Init(i + 1);
   }
+  
+  #if defined(CLEAR_BIT) && defined(SET_BIT)
+	  // Set the ADC prescaler to 16 for boards that support it,
+	  // which is a good balance between speed and accuracy.
+	  // More information can be found here: http://www.gammon.com.au/adc
+	  SET_BIT(ADCSRA, ADPS2);
+	  CLEAR_BIT(ADCSRA, ADPS1);
+	  CLEAR_BIT(ADCSRA, ADPS0);
+  #endif
 }
 
 void loop() {
