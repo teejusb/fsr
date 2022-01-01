@@ -10,7 +10,7 @@ from collections import OrderedDict
 from random import normalvariate
 
 import serial
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSCloseCode, WSMsgType
 from aiohttp.web import json_response
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
-# Threads for the serial reader and writer.
-read_thread = None
-write_thread = None
+# Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
 # Amount of panels.
@@ -221,6 +219,7 @@ class SerialHandler(object):
           self.Open()
           # Still not open, retry loop.
           if not self.ser:
+            time.sleep(1)
             continue
 
         try:
@@ -251,7 +250,10 @@ class SerialHandler(object):
 
   def Write(self):
     while not thread_stop_event.isSet():
-      command = self.write_queue.get()
+      try:
+        command = self.write_queue.get(timeout=1)
+      except queue.Empty:
+        continue
       if NO_SERIAL:
         if command[0] == 't':
           broadcast(['thresholds',
@@ -338,6 +340,7 @@ async def get_ws(request):
   ws = web.WebSocketResponse()
   await ws.prepare(request)
 
+  request.app['websockets'].append(ws)
   print('Client connected')
   profile_handler.MaybeLoad()
 
@@ -347,20 +350,6 @@ async def get_ws(request):
     'thresholds',
     {'thresholds': profile_handler.GetCurThresholds()},
   ])
-
-  global read_thread, write_thread
-
-  if not read_thread or not read_thread.is_alive():
-    print('Starting Read thread')
-    read_thread = threading.Thread(target=serial_handler.Read)
-    read_thread.daemon = True
-    read_thread.start()
-
-  if not write_thread or not write_thread.is_alive():
-    print('Starting Write thread')
-    write_thread = threading.Thread(target=serial_handler.Write)
-    write_thread.daemon = True
-    write_thread.start()
 
   # Potentially fetch any threshold values from the microcontroller that
   # may be out of sync with our profiles.
@@ -414,6 +403,7 @@ async def get_ws(request):
   except ConnectionResetError:
     pass
   finally:
+    request.app['websockets'].remove(ws)
     with out_queues_lock:
       out_queues.remove(queue)
 
@@ -431,8 +421,23 @@ build_dir = os.path.abspath(
 async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
+async def on_startup(app):
+  read_thread = threading.Thread(target=serial_handler.Read)
+  read_thread.start()
+
+  write_thread = threading.Thread(target=serial_handler.Write)
+  write_thread.start()
+
+async def on_shutdown(app):
+  for ws in app['websockets']:
+    await ws.close(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
+  thread_stop_event.set()
 
 app = web.Application()
+
+# List of open websockets, to close when the app shuts down.
+app['websockets'] = []
+
 app.add_routes([
   web.get('/defaults', get_defaults),
   web.get('/ws', get_ws),
@@ -443,7 +448,8 @@ if not NO_SERIAL:
     web.get('/plot', get_index),
     web.static('/', build_dir),
   ])
-
+app.on_shutdown.append(on_shutdown)
+app.on_startup.append(on_startup)
 
 if __name__ == '__main__':
   hostname = socket.gethostname()
