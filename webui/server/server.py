@@ -10,7 +10,7 @@ from collections import OrderedDict
 from random import normalvariate
 
 import serial
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSCloseCode, WSMsgType
 from aiohttp.web import json_response
 
 logger = logging.getLogger(__name__)
@@ -430,7 +430,7 @@ async def on_startup(app):
 
 async def on_shutdown(app):
   for ws in app['websockets']:
-    await ws.close(code=999, message='Server shutdown')
+    await ws.close(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
   thread_stop_event.set()
 
 app = web.Application()
