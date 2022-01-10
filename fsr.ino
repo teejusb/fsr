@@ -558,8 +558,11 @@ void loop() {
   // We only want to send over USB every millisecond, but we still want to
   // read the analog values as fast as we can to have the most up to date
   // values for the average.
-  static bool willSend = (loopTime == -1 ||
-                          startMicros - lastSend + loopTime >= 1000);
+  static bool willSend;
+  // Separate out the initialization and the update steps for willSend.
+  // Since willSend is static, we want to make sure we update the variable
+  // every time we loop.
+  willSend = (loopTime == -1 || startMicros - lastSend + loopTime >= 1000);
 
   serialProcessor.CheckAndMaybeProcessData();
 
