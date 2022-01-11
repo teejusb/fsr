@@ -100,7 +100,8 @@ class WeightedMovingAverage {
     // are integers and we need to return an int anyways. Off by one isn't
     // substantial here.
     // Sum of weights = sum of all integers from [1, size_]
-    return next_weighted_sum/((size_ * (size_ + 1)) / 2);
+    int16_t sum_weights = ((size_ * (size_ + 1)) / 2);
+    return next_weighted_sum/sum_weights;
   }
 
   // Delete default constructor. Size MUST be explicitly specified.
@@ -347,6 +348,7 @@ class Sensor {
     #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
       cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+      cur_value_ = constrain(cur_value_, 0, 1023);
     #else
       // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
       // since averaging seems to be broken with it. This should also include
