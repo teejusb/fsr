@@ -623,17 +623,26 @@ function App() {
 
   useEffect(() => {
     let cleaningUp = false;
+    let timeoutId = 0;
 
-    // Fetch all the default values the first time we load the page.
-    // We will re-render after everything is fetched.
-    fetch('/defaults').then(res => res.json()).then(data => {
-      if (!cleaningUp) {
-        setDefaults(data);
-      }
-    });
+    const getDefaults = () => {
+      clearTimeout(timeoutId);
+      fetch('/defaults').then(res => res.json()).then(data => {
+        if (!cleaningUp) {
+          setDefaults(data);
+        }
+      }).catch(reason => {
+        if (!cleaningUp) {
+          timeoutId = setTimeout(getDefaults, 1000);
+        }
+      });
+    }
+
+    getDefaults();
 
     return () => {
       cleaningUp = true;
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -641,7 +650,7 @@ function App() {
   if (defaults) {
     return <MainPartOfApp defaults={defaults} />
   } else {
-    return null;
+    return <div>Connecting</div>;
   }
 }
 
