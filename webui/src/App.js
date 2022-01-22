@@ -21,9 +21,6 @@ import {
   Link
 } from "react-router-dom";
 
-// Amount of panels.
-const num_panels = 4;
-
 // Maximum number of historical sensor values to retain
 const max_size = 1000;
 
@@ -33,17 +30,17 @@ const max_size = 1000;
 // The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
-function useServerConnection() {
+function useWsConnection(numPanels) {
   const curValuesRef = useRef({
 
     // A history of the past 'max_size' values fetched from the backend.
     // Used for plotting and displaying live values.
     // We use a cyclical array to save memory.
-    kCurValues: [],
+    kCurValues: [new Array(numPanels).fill(0)],
     oldest: 0,
 
     // Keep track of the current thresholds fetched from the backend.
-    kCurThresholds: [],
+    kCurThresholds: new Array(numPanels).fill(0),
   });
 
   const wsRef = useRef();
@@ -336,12 +333,12 @@ function ValueMonitor(props) {
 }
 
 function WebUI(props) {
-  const emit = props.emit;
+  const { emit, numPanels} = props;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          {[...Array(num_panels).keys()].map(index => (
+          {[...Array(numPanels).keys()].map(index => (
           	<ValueMonitor emit={emit} index={index} key={index} />)
           )}
         </Row>
@@ -521,30 +518,15 @@ function Plot() {
   );
 }
 
-function App() {
-  const [fetched, setFetched] = useState(false);
-  const [profiles, setProfiles] = useState([]);
-  const [activeProfile, setActiveProfile] = useState('');
-  const { curValuesRef, emit, wsCallbacksRef } = useServerConnection();
+function MainPartOfApp(props) {
+  const defaults = props.defaults;
+  const numPanels = defaults.thresholds.length;
+  const [profiles, setProfiles] = useState(defaults.profiles);
+  const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
+  const { curValuesRef, emit, wsCallbacksRef } = useWsConnection(numPanels);
 
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
-    let cleaningUp = false;
-
-    // Fetch all the default values the first time we load the page.
-    // We will re-render after everything is fetched.
-    if (!fetched) {
-      fetch('/defaults').then(res => res.json()).then(data => {
-          if (cleaningUp) {
-            return;
-          }
-          setProfiles(data.profiles);
-          setActiveProfile(data.cur_profile);
-          curValuesRef.current.kCurThresholds.length = 0
-          curValuesRef.current.kCurThresholds.push(...data.thresholds);
-          setFetched(true);
-      });
-    }
 
     wsCallbacks.get_profiles = function(msg) {
       setProfiles(msg.profiles);
@@ -554,11 +536,10 @@ function App() {
     };
 
     return () => {
-      cleaningUp = true;
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
     };
-  }, [activeProfile, curValuesRef, fetched, profiles, wsCallbacksRef]);
+  }, [profiles, wsCallbacksRef]);
 
   function AddProfile(e) {
     // Only add a profile on the enter key.
@@ -582,63 +563,86 @@ function App() {
     emit(['change_profile', profile_name]);
   }
 
-  // Don't render anything until the defaults are fetched.
   return (
-    fetched ?
-      <CurValuesRefContext.Provider value={curValuesRef}>
-        <div className="App">
-          <Router>
-            <Navbar bg="light">
-              <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
-              <Nav>
-                <Nav.Item>
-                  <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
-                </Nav.Item>
-              </Nav>
-              <Nav className="ml-auto">
-                <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-                  {profiles.map(function(profile) {
-                    if (profile === activeProfile) {
-                      return(
-                        <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                            onClick={ChangeProfile} active>
-                          <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                        </NavDropdown.Item>
-                      );
-                    } else {
-                      return(
-                        <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                            onClick={ChangeProfile}>
-                          <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                        </NavDropdown.Item>
-                      );
-                    }
-                  })}
-                  <NavDropdown.Divider />
-                  <Form inline onSubmit={(e) => e.preventDefault()}>
-                    <Form.Control
-                        onKeyDown={AddProfile}
-                        style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
-                        type="text"
-                        placeholder="New Profile" />
-                  </Form>
-                </NavDropdown>
-              </Nav>
-            </Navbar>
-            <Switch>
-              <Route exact path="/">
-                <WebUI emit={emit} />
-              </Route>
-              <Route path="/plot">
-                <Plot />
-              </Route>
-            </Switch>
-          </Router>
-        </div>
-      </CurValuesRefContext.Provider>
-    :
-    <></>
+    <CurValuesRefContext.Provider value={curValuesRef}>
+      <div className="App">
+        <Router>
+          <Navbar bg="light">
+            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+            <Nav>
+              <Nav.Item>
+                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+              </Nav.Item>
+            </Nav>
+            <Nav className="ml-auto">
+              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+                {profiles.map(function(profile) {
+                  if (profile === activeProfile) {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile} active>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  } else {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile}>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  }
+                })}
+                <NavDropdown.Divider />
+                <Form inline onSubmit={(e) => e.preventDefault()}>
+                  <Form.Control
+                      onKeyDown={AddProfile}
+                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                      type="text"
+                      placeholder="New Profile" />
+                </Form>
+              </NavDropdown>
+            </Nav>
+          </Navbar>
+          <Switch>
+            <Route exact path="/">
+              <WebUI emit={emit} numPanels={numPanels} />
+            </Route>
+            <Route path="/plot">
+              <Plot />
+            </Route>
+          </Switch>
+        </Router>
+      </div>
+    </CurValuesRefContext.Provider>
   );
+}
+
+function App() {
+  const [defaults, setDefaults] = useState();
+
+  useEffect(() => {
+    let cleaningUp = false;
+
+    // Fetch all the default values the first time we load the page.
+    // We will re-render after everything is fetched.
+    fetch('/defaults').then(res => res.json()).then(data => {
+      if (!cleaningUp) {
+        setDefaults(data);
+      }
+    });
+
+    return () => {
+      cleaningUp = true;
+    };
+  }, []);
+
+  // Don't render anything until the defaults are fetched.
+  if (defaults) {
+    return <MainPartOfApp defaults={defaults} />
+  } else {
+    return null;
+  }
 }
 
 export default App;
