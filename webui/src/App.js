@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useContext, useEffect, useState, useRef } from 'react';
 
 import logo from './logo.svg';
 import './App.css';
@@ -23,6 +23,8 @@ import {
 
 // Amount of panels.
 const num_panels = 4;
+
+const CurValuesRefContext = React.createContext();
 
 // Keep track of the current thresholds fetched from the backend.
 // Make it global since it's used by many components.
@@ -89,7 +91,8 @@ wsCallbacks.values = function(msg) {
 };
 
 wsCallbacks.thresholds = function(msg) {
-  kCurThresholds = msg.thresholds;
+  kCurThresholds.length = 0
+  kCurThresholds.push(...msg.thresholds);
 };
 
 connect();
@@ -101,6 +104,9 @@ function ValueMonitor(props) {
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
+  const curValuesRef = useContext(CurValuesRefContext);
+  const kCurValues = curValuesRef.current.kCurValues;
+  const kCurThresholds = curValuesRef.current.kCurThresholds;
 
   function EmitValue(val) {
     // Send back all the thresholds instead of a single value per sensor. This is in case
@@ -317,6 +323,9 @@ function Plot() {
   const canvasRef = React.useRef(null);
   const colors = ['red', 'orange', 'green', 'blue'];
   const display = [true, true, true, true];
+  const curValuesRef = useContext(CurValuesRefContext);
+  const kCurValues = curValuesRef.current.kCurValues;
+  const kCurThresholds = curValuesRef.current.kCurThresholds;
 
   useEffect(() => {
     let requestId;
@@ -483,6 +492,7 @@ function App() {
   const [fetched, setFetched] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState('');
+  const curValuesRef = useRef({ kCurValues, kCurThresholds });
 
   useEffect(() => {
     // Fetch all the default values the first time we load the page.
@@ -491,7 +501,8 @@ function App() {
       fetch('/defaults').then(res => res.json()).then(data => {
           setProfiles(data.profiles);
           setActiveProfile(data.cur_profile);
-          kCurThresholds = data.thresholds;
+          kCurThresholds.length = 0
+          kCurThresholds.push(...data.thresholds);
           setFetched(true);
       });
     }
@@ -534,55 +545,57 @@ function App() {
   // Don't render anything until the defaults are fetched.
   return (
     fetched ?
-      <div className="App">
-        <Router>
-          <Navbar bg="light">
-            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
-            <Nav>
-              <Nav.Item>
-                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
-              </Nav.Item>
-            </Nav>
-            <Nav className="ml-auto">
-              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-                {profiles.map(function(profile) {
-                  if (profile === activeProfile) {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile} active>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  } else {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile}>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  }
-                })}
-                <NavDropdown.Divider />
-                <Form inline onSubmit={(e) => e.preventDefault()}>
-                  <Form.Control
-                      onKeyDown={AddProfile}
-                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
-                      type="text"
-                      placeholder="New Profile" />
-                </Form>
-              </NavDropdown>
-            </Nav>
-          </Navbar>
-          <Switch>
-            <Route exact path="/">
-              <WebUI />
-            </Route>
-            <Route path="/plot">
-              <Plot />
-            </Route>
-          </Switch>
-        </Router>
-      </div>
+      <CurValuesRefContext.Provider value={curValuesRef}>
+        <div className="App">
+          <Router>
+            <Navbar bg="light">
+              <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+              <Nav>
+                <Nav.Item>
+                  <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+                </Nav.Item>
+              </Nav>
+              <Nav className="ml-auto">
+                <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+                  {profiles.map(function(profile) {
+                    if (profile === activeProfile) {
+                      return(
+                        <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                            onClick={ChangeProfile} active>
+                          <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                        </NavDropdown.Item>
+                      );
+                    } else {
+                      return(
+                        <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                            onClick={ChangeProfile}>
+                          <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                        </NavDropdown.Item>
+                      );
+                    }
+                  })}
+                  <NavDropdown.Divider />
+                  <Form inline onSubmit={(e) => e.preventDefault()}>
+                    <Form.Control
+                        onKeyDown={AddProfile}
+                        style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                        type="text"
+                        placeholder="New Profile" />
+                  </Form>
+                </NavDropdown>
+              </Nav>
+            </Navbar>
+            <Switch>
+              <Route exact path="/">
+                <WebUI />
+              </Route>
+              <Route path="/plot">
+                <Plot />
+              </Route>
+            </Switch>
+          </Router>
+        </div>
+      </CurValuesRefContext.Provider>
     :
     <></>
   );
