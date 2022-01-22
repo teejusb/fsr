@@ -529,11 +529,15 @@ function App() {
 
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
+    let cleaningUp = false;
 
     // Fetch all the default values the first time we load the page.
     // We will re-render after everything is fetched.
     if (!fetched) {
       fetch('/defaults').then(res => res.json()).then(data => {
+          if (cleaningUp) {
+            return;
+          }
           setProfiles(data.profiles);
           setActiveProfile(data.cur_profile);
           curValuesRef.current.kCurThresholds.length = 0
@@ -550,6 +554,7 @@ function App() {
     };
 
     return () => {
+      cleaningUp = true;
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
     };
