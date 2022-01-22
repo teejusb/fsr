@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useContext, useEffect, useState, useRef } from 'react';
 
 import logo from './logo.svg';
 import './App.css';
@@ -24,83 +24,111 @@ import {
 // Amount of panels.
 const num_panels = 4;
 
+// Maximum number of historical sensor values to retain
+const max_size = 1000;
+
+// Reference to history of current sensor values.
+// The values are stored in a mutable array in a ref so that they are not
+// subject to the React render cycle, for performance reasons.
+// The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
-// Keep track of the current thresholds fetched from the backend.
-// Make it global since it's used by many components.
-let kCurThresholds = new Array(num_panels).fill(0);
+function useServerConnection() {
+  const curValuesRef = useRef({
 
-// A history of the past 'max_size' values fetched from the backend.
-// Used for plotting and displaying live values.
-// We use a cyclical array to save memory.
-let kCurValues = [new Array(num_panels).fill(0)];
-const max_size = 1000;
-let oldest = 0;
+    // A history of the past 'max_size' values fetched from the backend.
+    // Used for plotting and displaying live values.
+    // We use a cyclical array to save memory.
+    kCurValues: [],
+    oldest: 0,
 
-var ws;
-const wsCallbacks = {};
-const wsQueue = [];
+    // Keep track of the current thresholds fetched from the backend.
+    kCurThresholds: [],
+  });
 
-function connect() {
-  ws = new WebSocket('ws://' + window.location.host + '/ws');
+  const wsRef = useRef();
+  const wsCallbacksRef = useRef({});
+  const wsQueueRef = useRef([]);
 
-  ws.addEventListener('open', function(ev) {
-    while (wsQueue.length > 0 && ws.readyState === 1) {
-      let msg = wsQueue.shift();
-      ws.send(JSON.stringify(msg));
+  const emit = useCallback((msg) => {
+    // Queue the message if the websocket connection is not ready yet.
+    // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
+    if (!wsRef.current || wsRef.current.readyState !== 1 /* OPEN */) {
+      wsQueueRef.current.push(msg);
+      return;
     }
-  });
 
-  ws.addEventListener('error', function(ev) {
-    ws.close();
-  });
+    wsRef.current.send(JSON.stringify(msg));
+  }, [wsQueueRef, wsRef]);
 
-  ws.addEventListener('close', function(ev) {
-    setTimeout(connect, 1000);
-  });
-
-  ws.addEventListener('message', function(ev) {
-    const data = JSON.parse(ev.data)
-    const action = data[0];
-    const msg = data[1];
-
-    if (wsCallbacks[action]) {
-      wsCallbacks[action](msg);
+  wsCallbacksRef.current.values = function(msg) {
+    const curValues = curValuesRef.current;
+    if (curValues.kCurValues.length < max_size) {
+      curValues.kCurValues.push(msg.values);
+    } else {
+      curValues.kCurValues[curValues.oldest] = msg.values;
+      curValues.oldest = (curValues.oldest + 1) % max_size;
     }
+  };
+
+  wsCallbacksRef.current.thresholds = function(msg) {
+    curValuesRef.current.kCurThresholds.length = 0;
+    curValuesRef.current.kCurThresholds.push(...msg.thresholds);
+  };
+
+  useEffect(() => {
+    let cleaningUp = false;
+    let reconnectTimeoutId = 0;
+
+    function connect() {
+      wsRef.current = new WebSocket('ws://' + window.location.host + '/ws');
+
+      wsRef.current.addEventListener('open', function(ev) {
+        while (wsQueueRef.current.length > 0 && wsRef.current.readyState === 1) {
+          let msg = wsQueueRef.current.shift();
+          wsRef.current.send(JSON.stringify(msg));
+        }
+      });
+
+      wsRef.current.addEventListener('error', function(ev) {
+        wsRef.current.close();
+      });
+
+      wsRef.current.addEventListener('close', function(ev) {
+        if (!cleaningUp) {
+          reconnectTimeoutId = setTimeout(connect, 1000);
+        }
+      });
+
+      wsRef.current.addEventListener('message', function(ev) {
+        const data = JSON.parse(ev.data)
+        const action = data[0];
+        const msg = data[1];
+
+        if (wsCallbacksRef.current[action]) {
+          wsCallbacksRef.current[action](msg);
+        }
+      });
+    }
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeoutId);
+      cleaningUp = true;
+      wsRef.current.close();
+    };
   });
+
+  return { emit, curValuesRef, wsCallbacksRef };
 }
 
-function emit(msg) {
-  // Queue the message if the websocket connection is not ready yet.
-  // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
-  if (ws.readyState !== 1 /* OPEN */) {
-    wsQueue.push(ws);
-    return;
-  }
-
-  ws.send(JSON.stringify(msg));
-}
-
-wsCallbacks.values = function(msg) {
-  if (kCurValues.length < max_size) {
-    kCurValues.push(msg.values);
-  } else {
-    kCurValues[oldest] = msg.values;
-    oldest = (oldest + 1) % max_size;
-  }
-};
-
-wsCallbacks.thresholds = function(msg) {
-  kCurThresholds.length = 0
-  kCurThresholds.push(...msg.thresholds);
-};
-
-connect();
 
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 function ValueMonitor(props) {
   const index = parseInt(props.index)
+  const emit = props.emit;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
@@ -218,6 +246,8 @@ function ValueMonitor(props) {
     var previousTimestamp;
 
     const render = (timestamp) => {
+      const oldest = curValuesRef.current.oldest;
+
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
         return;
@@ -305,13 +335,14 @@ function ValueMonitor(props) {
   );
 }
 
-function WebUI() {
+function WebUI(props) {
+  const emit = props.emit;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          {[...Array(num_panels).keys()].map(value_monitor => (
-          	<ValueMonitor index={value_monitor}/>)
+          {[...Array(num_panels).keys()].map(index => (
+          	<ValueMonitor emit={emit} index={index} key={index} />)
           )}
         </Row>
       </Container>
@@ -359,6 +390,8 @@ function Plot() {
     var previousTimestamp;
 
     const render = (timestamp) => {
+      const oldest = curValuesRef.current.oldest;
+
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
         return;
@@ -447,7 +480,7 @@ function Plot() {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, display]);
+  }, [colors, curValuesRef, display, kCurThresholds, kCurValues]);
 
   function ToggleLine(index) {
     display[index] = !display[index];
@@ -492,17 +525,19 @@ function App() {
   const [fetched, setFetched] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState('');
-  const curValuesRef = useRef({ kCurValues, kCurThresholds });
+  const { curValuesRef, emit, wsCallbacksRef } = useServerConnection();
 
   useEffect(() => {
+    const wsCallbacks = wsCallbacksRef.current;
+
     // Fetch all the default values the first time we load the page.
     // We will re-render after everything is fetched.
     if (!fetched) {
       fetch('/defaults').then(res => res.json()).then(data => {
           setProfiles(data.profiles);
           setActiveProfile(data.cur_profile);
-          kCurThresholds.length = 0
-          kCurThresholds.push(...data.thresholds);
+          curValuesRef.current.kCurThresholds.length = 0
+          curValuesRef.current.kCurThresholds.push(...data.thresholds);
           setFetched(true);
       });
     }
@@ -518,12 +553,12 @@ function App() {
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
     };
-  }, [fetched, profiles, activeProfile]);
+  }, [activeProfile, curValuesRef, fetched, profiles, wsCallbacksRef]);
 
   function AddProfile(e) {
     // Only add a profile on the enter key.
     if (e.keyCode === 13) {
-      emit(['add_profile', e.target.value, kCurThresholds]);
+      emit(['add_profile', e.target.value, curValuesRef.current.kCurThresholds]);
       // Reset the text box.
       e.target.value = "";
     }
@@ -587,7 +622,7 @@ function App() {
             </Navbar>
             <Switch>
               <Route exact path="/">
-                <WebUI />
+                <WebUI emit={emit} />
               </Route>
               <Route path="/plot">
                 <Plot />
