@@ -30,7 +30,7 @@ const max_size = 1000;
 // The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
-function useWsConnection(numPanels) {
+function useWsConnection(numPanels, handleWsClose) {
   const curValuesRef = useRef({
 
     // A history of the past 'max_size' values fetched from the backend.
@@ -75,45 +75,40 @@ function useWsConnection(numPanels) {
 
   useEffect(() => {
     let cleaningUp = false;
-    let reconnectTimeoutId = 0;
 
-    function connect() {
-      wsRef.current = new WebSocket('ws://' + window.location.host + '/ws');
+    const ws = new WebSocket('ws://' + window.location.host + '/ws');
+    wsRef.current = ws;
 
-      wsRef.current.addEventListener('open', function(ev) {
-        while (wsQueueRef.current.length > 0 && wsRef.current.readyState === 1) {
-          let msg = wsQueueRef.current.shift();
-          wsRef.current.send(JSON.stringify(msg));
-        }
-      });
+    ws.addEventListener('open', function(ev) {
+      while (wsQueueRef.current.length > 0 && ws.readyState === 1) {
+        let msg = wsQueueRef.current.shift();
+        ws.send(JSON.stringify(msg));
+      }
+    });
 
-      wsRef.current.addEventListener('error', function(ev) {
-        wsRef.current.close();
-      });
+    ws.addEventListener('error', function(ev) {
+      ws.close();
+    });
 
-      wsRef.current.addEventListener('close', function(ev) {
-        if (!cleaningUp) {
-          reconnectTimeoutId = setTimeout(connect, 1000);
-        }
-      });
+    ws.addEventListener('close', function(ev) {
+      if (!cleaningUp) {
+        handleWsClose();
+      }
+    });
 
-      wsRef.current.addEventListener('message', function(ev) {
-        const data = JSON.parse(ev.data)
-        const action = data[0];
-        const msg = data[1];
+    ws.addEventListener('message', function(ev) {
+      const data = JSON.parse(ev.data)
+      const action = data[0];
+      const msg = data[1];
 
-        if (wsCallbacksRef.current[action]) {
-          wsCallbacksRef.current[action](msg);
-        }
-      });
-    }
-
-    connect();
+      if (wsCallbacksRef.current[action]) {
+        wsCallbacksRef.current[action](msg);
+      }
+    });
 
     return () => {
-      clearTimeout(reconnectTimeoutId);
       cleaningUp = true;
-      wsRef.current.close();
+      ws.close();
     };
   });
 
@@ -519,11 +514,11 @@ function Plot() {
 }
 
 function MainPartOfApp(props) {
-  const defaults = props.defaults;
+  const { clearDefaults, defaults } = props;
   const numPanels = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
-  const { curValuesRef, emit, wsCallbacksRef } = useWsConnection(numPanels);
+  const { curValuesRef, emit, wsCallbacksRef } = useWsConnection(numPanels, clearDefaults);
 
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
@@ -621,6 +616,8 @@ function MainPartOfApp(props) {
 function App() {
   const [defaults, setDefaults] = useState();
 
+  const clearDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
+
   useEffect(() => {
     let cleaningUp = false;
     let timeoutId = 0;
@@ -638,17 +635,19 @@ function App() {
       });
     }
 
-    getDefaults();
+    if (!defaults) {
+      getDefaults();
+    }
 
     return () => {
       cleaningUp = true;
       clearTimeout(timeoutId);
     };
-  }, []);
+  }, [defaults]);
 
   // Don't render anything until the defaults are fetched.
   if (defaults) {
-    return <MainPartOfApp defaults={defaults} />
+    return <MainPartOfApp clearDefaults={clearDefaults} defaults={defaults} />
   } else {
     return <div>Connecting</div>;
   }
