@@ -30,7 +30,9 @@ const max_size = 1000;
 // The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
-function useWsConnection(numPanels, handleWsClose) {
+function useWsConnection({ numPanels, onCloseWs }) {
+  const [isWsReady, setIsWsReady] = useState(false);
+
   const curValuesRef = useRef({
 
     // A history of the past 'max_size' values fetched from the backend.
@@ -45,18 +47,21 @@ function useWsConnection(numPanels, handleWsClose) {
 
   const wsRef = useRef();
   const wsCallbacksRef = useRef({});
-  const wsQueueRef = useRef([]);
 
   const emit = useCallback((msg) => {
-    // Queue the message if the websocket connection is not ready yet.
-    // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
-    if (!wsRef.current || wsRef.current.readyState !== 1 /* OPEN */) {
-      wsQueueRef.current.push(msg);
+    // Throw error if the websocket connection is not ready yet.
+    // App should wait for open websocket to send messages.
+    if (!wsRef.current || !isWsReady) {
+      throw new Error("emit() called but websocket is not open yet.");
+    } else if (wsRef.current.readyState !== 1 /* OPEN */) {
+      // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
+      // If the effect that opened the socket is cleaning up, some message
+      // could still be sent, but should be ignored here.
       return;
     }
 
     wsRef.current.send(JSON.stringify(msg));
-  }, [wsQueueRef, wsRef]);
+  }, [isWsReady, wsRef]);
 
   wsCallbacksRef.current.values = function(msg) {
     const curValues = curValuesRef.current;
@@ -80,10 +85,7 @@ function useWsConnection(numPanels, handleWsClose) {
     wsRef.current = ws;
 
     ws.addEventListener('open', function(ev) {
-      while (wsQueueRef.current.length > 0 && ws.readyState === 1) {
-        let msg = wsQueueRef.current.shift();
-        ws.send(JSON.stringify(msg));
-      }
+      setIsWsReady(true);
     });
 
     ws.addEventListener('error', function(ev) {
@@ -92,7 +94,7 @@ function useWsConnection(numPanels, handleWsClose) {
 
     ws.addEventListener('close', function(ev) {
       if (!cleaningUp) {
-        handleWsClose();
+        onCloseWs();
       }
     });
 
@@ -112,7 +114,7 @@ function useWsConnection(numPanels, handleWsClose) {
     };
   });
 
-  return { emit, curValuesRef, wsCallbacksRef };
+  return { curValuesRef, emit, isWsReady, wsCallbacksRef };
 }
 
 
@@ -514,12 +516,10 @@ function Plot() {
 }
 
 function MainPartOfApp(props) {
-  const { clearDefaults, defaults } = props;
+  const { curValuesRef, emit, defaults, wsCallbacksRef } = props;
   const numPanels = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
-  const { curValuesRef, emit, wsCallbacksRef } = useWsConnection(numPanels, clearDefaults);
-
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
 
@@ -613,6 +613,25 @@ function MainPartOfApp(props) {
   );
 }
 
+function WebSocketConnectionWrapper(props) {
+  const { clearDefaults, defaults } = props;
+  const numPanels = defaults.thresholds.length;
+  const { curValuesRef, emit, isWsReady, wsCallbacksRef } = useWsConnection({ onCloseWs: clearDefaults, numPanels });
+
+  if (isWsReady) {
+    return (
+      <MainPartOfApp
+        curValuesRef={curValuesRef}
+        defaults={defaults}
+        emit={emit}
+        wsCallbacksRef={wsCallbacksRef}
+      />
+    );
+  } else {
+    return null;
+  }
+}
+
 function App() {
   const [defaults, setDefaults] = useState();
 
@@ -647,7 +666,7 @@ function App() {
 
   // Don't render anything until the defaults are fetched.
   if (defaults) {
-    return <MainPartOfApp clearDefaults={clearDefaults} defaults={defaults} />
+    return <WebSocketConnectionWrapper clearDefaults={clearDefaults} defaults={defaults} />
   } else {
     return <div>Connecting</div>;
   }
