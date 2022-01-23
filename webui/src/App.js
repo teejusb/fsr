@@ -515,7 +515,7 @@ function Plot() {
   );
 }
 
-function MainPartOfApp(props) {
+function FSRWebUI(props) {
   const { curValuesRef, emit, defaults, wsCallbacksRef } = props;
   const numPanels = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
@@ -613,6 +613,25 @@ function MainPartOfApp(props) {
   );
 }
 
+function LoadingScreen() {
+  return (
+    <div style={{ color: "white", height: "100vh", width: "100vw" }}>
+      <Navbar bg="light">
+        <Navbar.Brand as={"span"} to="/">FSR WebUI</Navbar.Brand>
+      </Navbar>
+      <div style={{
+        backgroundColor: "#282c34",
+        border: "1px solid white",
+        fontSize: "1.25rem",
+        padding: "0.5rem 1rem",
+        height: "96vh"
+      }}>
+        Connecting...
+      </div>
+    </div>
+  );
+}
+
 function WebSocketConnectionWrapper(props) {
   const { clearDefaults, defaults } = props;
   const numPanels = defaults.thresholds.length;
@@ -620,7 +639,7 @@ function WebSocketConnectionWrapper(props) {
 
   if (isWsReady) {
     return (
-      <MainPartOfApp
+      <FSRWebUI
         curValuesRef={curValuesRef}
         defaults={defaults}
         emit={emit}
@@ -628,15 +647,18 @@ function WebSocketConnectionWrapper(props) {
       />
     );
   } else {
-    return null;
+    return <LoadingScreen />
   }
 }
 
 function App() {
   const [defaults, setDefaults] = useState();
 
+  // Call this to clear the defaults and reload from the server.
+  // This also unmounts most of the app.
   const clearDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
 
+  // Load defaults at mount and reload any time they are cleared.
   useEffect(() => {
     let cleaningUp = false;
     let timeoutId = 0;
@@ -668,7 +690,7 @@ function App() {
   if (defaults) {
     return <WebSocketConnectionWrapper clearDefaults={clearDefaults} defaults={defaults} />
   } else {
-    return <div>Connecting</div>;
+    return <LoadingScreen />
   }
 }
 
