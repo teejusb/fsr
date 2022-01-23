@@ -30,7 +30,16 @@ const max_size = 1000;
 // The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
-function useWsConnection({ numPanels, onCloseWs }) {
+// returns { curValuesRef, emit, isWsReady, wsCallbacksRef }
+// curValuesRef tracks values as well as thresholds.
+// Use emit to send events to the server.
+// isWsReady indicates that the websocket is connected and has received
+// its first values reading from the server.
+// onCloseWs is called when the websocket closes for any reason,
+// unless the hooks is already doing effect cleanup.
+// The expectation is that onCloseWs is used to reload default thresholds
+// and provide new ones to trigger a new connection.
+function useWsConnection({ defaultThresholds, onCloseWs }) {
   const [isWsReady, setIsWsReady] = useState(false);
 
   const curValuesRef = useRef({
@@ -38,11 +47,11 @@ function useWsConnection({ numPanels, onCloseWs }) {
     // A history of the past 'max_size' values fetched from the backend.
     // Used for plotting and displaying live values.
     // We use a cyclical array to save memory.
-    kCurValues: [new Array(numPanels).fill(0)],
+    kCurValues: [],
     oldest: 0,
 
     // Keep track of the current thresholds fetched from the backend.
-    kCurThresholds: new Array(numPanels).fill(0),
+    kCurThresholds: [...defaultThresholds],
   });
 
   const wsRef = useRef();
@@ -50,9 +59,9 @@ function useWsConnection({ numPanels, onCloseWs }) {
 
   const emit = useCallback((msg) => {
     // Throw error if the websocket connection is not ready yet.
-    // App should wait for open websocket to send messages.
+    // App should wait for isWsReady to send messages.
     if (!wsRef.current || !isWsReady) {
-      throw new Error("emit() called but websocket is not open yet.");
+      throw new Error("emit() called before isWsReady === true.");
     } else if (wsRef.current.readyState !== 1 /* OPEN */) {
       // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
       // If the effect that opened the socket is cleaning up, some message
@@ -71,9 +80,14 @@ function useWsConnection({ numPanels, onCloseWs }) {
       curValues.kCurValues[curValues.oldest] = msg.values;
       curValues.oldest = (curValues.oldest + 1) % max_size;
     }
+    if (curValues.kCurValues.length === 1) {
+      // WebSocket is considered ready after it gets its first "values" message.
+      setIsWsReady(true);
+    }
   };
 
   wsCallbacksRef.current.thresholds = function(msg) {
+    // Modify thresholds array in place instead of replacing it so that animation loops can have a stable reference.
     curValuesRef.current.kCurThresholds.length = 0;
     curValuesRef.current.kCurThresholds.push(...msg.thresholds);
   };
@@ -83,10 +97,6 @@ function useWsConnection({ numPanels, onCloseWs }) {
 
     const ws = new WebSocket('ws://' + window.location.host + '/ws');
     wsRef.current = ws;
-
-    ws.addEventListener('open', function(ev) {
-      setIsWsReady(true);
-    });
 
     ws.addEventListener('error', function(ev) {
       ws.close();
@@ -110,9 +120,10 @@ function useWsConnection({ numPanels, onCloseWs }) {
 
     return () => {
       cleaningUp = true;
+      setIsWsReady(false);
       ws.close();
     };
-  });
+  }, [onCloseWs, setIsWsReady]);
 
   return { curValuesRef, emit, isWsReady, wsCallbacksRef };
 }
@@ -634,8 +645,12 @@ function LoadingScreen() {
 
 function WsConnectionWrapper(props) {
   const { defaults, reloadDefaults } = props;
-  const numPanels = defaults.thresholds.length;
-  const { curValuesRef, emit, isWsReady, wsCallbacksRef } = useWsConnection({ onCloseWs: reloadDefaults, numPanels });
+  const {
+    curValuesRef,
+    emit,
+    isWsReady,
+    wsCallbacksRef
+  } = useWsConnection({ defaultThresholds: defaults.thresholds, onCloseWs: reloadDefaults });
 
   if (isWsReady) {
     return (
