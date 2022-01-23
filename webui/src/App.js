@@ -30,6 +30,44 @@ const max_size = 1000;
 // The Context is to make them easy to access from nested components.
 const CurValuesRefContext = React.createContext();
 
+// Returned `defaults` property will be undefined if the defaults are loading or reloading.
+// Call `reloadDefaults` to clear the defaults and reload from the server.
+function useDefaults() {
+  const [defaults, setDefaults] = useState();
+
+  const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
+
+  // Load defaults at mount and reload any time they are cleared.
+  useEffect(() => {
+    let cleaningUp = false;
+    let timeoutId = 0;
+
+    const getDefaults = () => {
+      clearTimeout(timeoutId);
+      fetch('/defaults').then(res => res.json()).then(data => {
+        if (!cleaningUp) {
+          setDefaults(data);
+        }
+      }).catch(reason => {
+        if (!cleaningUp) {
+          timeoutId = setTimeout(getDefaults, 1000);
+        }
+      });
+    }
+
+    if (!defaults) {
+      getDefaults();
+    }
+
+    return () => {
+      cleaningUp = true;
+      clearTimeout(timeoutId);
+    };
+  }, [defaults]);
+
+  return { defaults, reloadDefaults };
+}
+
 // returns { curValuesRef, emit, isWsReady, wsCallbacksRef }
 // curValuesRef tracks values as well as thresholds.
 // Use emit to send events to the server.
@@ -39,7 +77,7 @@ const CurValuesRefContext = React.createContext();
 // unless the hooks is already doing effect cleanup.
 // The expectation is that onCloseWs is used to reload default thresholds
 // and provide new ones to trigger a new connection.
-function useWsConnection({ defaultThresholds, onCloseWs }) {
+function useWsConnection({ defaults, onCloseWs }) {
   const [isWsReady, setIsWsReady] = useState(false);
 
   const curValuesRef = useRef({
@@ -51,22 +89,16 @@ function useWsConnection({ defaultThresholds, onCloseWs }) {
     oldest: 0,
 
     // Keep track of the current thresholds fetched from the backend.
-    kCurThresholds: [...defaultThresholds],
+    kCurThresholds: [],
   });
 
   const wsRef = useRef();
   const wsCallbacksRef = useRef({});
 
   const emit = useCallback((msg) => {
-    // Throw error if the websocket connection is not ready yet.
     // App should wait for isWsReady to send messages.
     if (!wsRef.current || !isWsReady) {
-      throw new Error("emit() called before isWsReady === true.");
-    } else if (wsRef.current.readyState !== 1 /* OPEN */) {
-      // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
-      // If the effect that opened the socket is cleaning up, some message
-      // could still be sent, but should be ignored here.
-      return;
+      throw new Error("emit() called when isWsReady !== true.");
     }
 
     wsRef.current.send(JSON.stringify(msg));
@@ -94,6 +126,18 @@ function useWsConnection({ defaultThresholds, onCloseWs }) {
 
   useEffect(() => {
     let cleaningUp = false;
+    const curValues = curValuesRef.current;
+
+    if (!defaults) {
+      // If defaults are loading or reloading, don't connect.
+      return;
+    }
+
+    // Ensure values history is empty and default thresholds are set.
+    curValues.kCurValues.length = 0;
+    curValues.oldest = 0;
+    curValuesRef.current.kCurThresholds.length = 0;
+    curValuesRef.current.kCurThresholds.push(...defaults.thresholds);
 
     const ws = new WebSocket('ws://' + window.location.host + '/ws');
     wsRef.current = ws;
@@ -123,11 +167,10 @@ function useWsConnection({ defaultThresholds, onCloseWs }) {
       setIsWsReady(false);
       ws.close();
     };
-  }, [onCloseWs, setIsWsReady]);
+  }, [defaults, onCloseWs]);
 
   return { curValuesRef, emit, isWsReady, wsCallbacksRef };
 }
-
 
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
@@ -643,16 +686,16 @@ function LoadingScreen() {
   );
 }
 
-function WsConnectionWrapper(props) {
-  const { defaults, reloadDefaults } = props;
+function App() {
+  const { defaults, reloadDefaults } = useDefaults();
   const {
     curValuesRef,
     emit,
     isWsReady,
     wsCallbacksRef
-  } = useWsConnection({ defaultThresholds: defaults.thresholds, onCloseWs: reloadDefaults });
+  } = useWsConnection({ defaults, onCloseWs: reloadDefaults });
 
-  if (isWsReady) {
+  if (defaults && isWsReady) {
     return (
       <FSRWebUI
         curValuesRef={curValuesRef}
@@ -661,55 +704,6 @@ function WsConnectionWrapper(props) {
         wsCallbacksRef={wsCallbacksRef}
       />
     );
-  } else {
-    return <LoadingScreen />
-  }
-}
-
-// Returned `defaults` property will be undefined if the defaults are loading or reloading.
-// Call `reloadDefaults` to clear the defaults and reload from the server.
-function useDefaults() {
-  const [defaults, setDefaults] = useState();
-
-  const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
-
-  // Load defaults at mount and reload any time they are cleared.
-  useEffect(() => {
-    let cleaningUp = false;
-    let timeoutId = 0;
-
-    const getDefaults = () => {
-      clearTimeout(timeoutId);
-      fetch('/defaults').then(res => res.json()).then(data => {
-        if (!cleaningUp) {
-          setDefaults(data);
-        }
-      }).catch(reason => {
-        if (!cleaningUp) {
-          timeoutId = setTimeout(getDefaults, 1000);
-        }
-      });
-    }
-
-    if (!defaults) {
-      getDefaults();
-    }
-
-    return () => {
-      cleaningUp = true;
-      clearTimeout(timeoutId);
-    };
-  }, [defaults]);
-
-  return { defaults, reloadDefaults };
-}
-
-function App() {
-  const { defaults, reloadDefaults } = useDefaults();
-
-  // Don't render anything until the defaults are fetched.
-  if (defaults) {
-    return <WsConnectionWrapper defaults={defaults} reloadDefaults={reloadDefaults} />
   } else {
     return <LoadingScreen />
   }
