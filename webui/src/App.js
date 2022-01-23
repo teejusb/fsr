@@ -329,7 +329,7 @@ function ValueMonitor(props) {
   );
 }
 
-function WebUI(props) {
+function ValueMonitors(props) {
   const { emit, numPanels} = props;
   return (
     <header className="App-header">
@@ -601,7 +601,7 @@ function FSRWebUI(props) {
           </Navbar>
           <Switch>
             <Route exact path="/">
-              <WebUI emit={emit} numPanels={numPanels} />
+              <ValueMonitors emit={emit} numPanels={numPanels} />
             </Route>
             <Route path="/plot">
               <Plot />
@@ -632,10 +632,10 @@ function LoadingScreen() {
   );
 }
 
-function WebSocketConnectionWrapper(props) {
-  const { clearDefaults, defaults } = props;
+function WsConnectionWrapper(props) {
+  const { defaults, reloadDefaults } = props;
   const numPanels = defaults.thresholds.length;
-  const { curValuesRef, emit, isWsReady, wsCallbacksRef } = useWsConnection({ onCloseWs: clearDefaults, numPanels });
+  const { curValuesRef, emit, isWsReady, wsCallbacksRef } = useWsConnection({ onCloseWs: reloadDefaults, numPanels });
 
   if (isWsReady) {
     return (
@@ -651,12 +651,12 @@ function WebSocketConnectionWrapper(props) {
   }
 }
 
-function App() {
+// Returned `defaults` property will be undefined if the defaults are loading or reloading.
+// Call `reloadDefaults` to clear the defaults and reload from the server.
+function useDefaults() {
   const [defaults, setDefaults] = useState();
 
-  // Call this to clear the defaults and reload from the server.
-  // This also unmounts most of the app.
-  const clearDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
+  const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
 
   // Load defaults at mount and reload any time they are cleared.
   useEffect(() => {
@@ -686,9 +686,15 @@ function App() {
     };
   }, [defaults]);
 
+  return { defaults, reloadDefaults };
+}
+
+function App() {
+  const { defaults, reloadDefaults } = useDefaults();
+
   // Don't render anything until the defaults are fetched.
   if (defaults) {
-    return <WebSocketConnectionWrapper clearDefaults={clearDefaults} defaults={defaults} />
+    return <WsConnectionWrapper defaults={defaults} reloadDefaults={reloadDefaults} />
   } else {
     return <LoadingScreen />
   }
