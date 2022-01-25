@@ -384,12 +384,12 @@ function ValueMonitor(props) {
 }
 
 function ValueMonitors(props) {
-  const { emit, numPanels} = props;
+  const { emit, numSensors} = props;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          {[...Array(numPanels).keys()].map(index => (
+          {[...Array(numSensors).keys()].map(index => (
           	<ValueMonitor emit={emit} index={index} key={index} />)
           )}
         </Row>
@@ -571,7 +571,7 @@ function Plot() {
 
 function FSRWebUI(props) {
   const { curValuesRef, emit, defaults, wsCallbacksRef } = props;
-  const numPanels = defaults.thresholds.length;
+  const numSensors = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
   useEffect(() => {
@@ -655,7 +655,7 @@ function FSRWebUI(props) {
           </Navbar>
           <Switch>
             <Route exact path="/">
-              <ValueMonitors emit={emit} numPanels={numPanels} />
+              <ValueMonitors emit={emit} numSensors={numSensors} />
             </Route>
             <Route path="/plot">
               <Plot />
