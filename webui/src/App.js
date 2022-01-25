@@ -182,13 +182,13 @@ function ValueMonitor(props) {
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
 
-  function EmitValue(val) {
+  const EmitValue = useCallback((val) => {
     // Send back all the thresholds instead of a single value per sensor. This is in case
     // the server restarts where it would be nicer to have all the values in sync.
     // Still send back the index since we want to update only one value at a time
     // to the microcontroller.
     emit(['update_threshold', curThresholds, index]);
-  }
+  }, [curThresholds, emit, index])
 
   function Decrement(e) {
     const val = curThresholds[index] - 1;
@@ -359,11 +359,7 @@ function ValueMonitor(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  // Intentionally disable the lint errors.
-  // EmitValue and index don't need to be in the dependency list as we only want this to 
-  // run once. The canvas will automatically update via requestAnimationFrame.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [EmitValue, curThresholds, curValues, index, webUIDataRef]);
 
   return(
     <Col style={{height: '75vh', paddingTop: '1vh'}}>
