@@ -27,7 +27,7 @@ const MAX_SIZE = 1000;
 // Returned `defaults` property will be undefined if the defaults are loading or reloading.
 // Call `reloadDefaults` to clear the defaults and reload from the server.
 function useDefaults() {
-  const [defaults, setDefaults] = useState();
+  const [defaults, setDefaults] = useState(undefined);
 
   const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
 
