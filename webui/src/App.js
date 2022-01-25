@@ -175,9 +175,7 @@ function useWsConnection({ defaults, onCloseWs }) {
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 function ValueMonitor(props) {
-  const index = parseInt(props.index)
-  const emit = props.emit;
-  const webUIDataRef = props.webUIDataRef;
+  const { emit, index, webUIDataRef } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
