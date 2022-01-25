@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 import logo from './logo.svg';
 import './App.css';
@@ -23,11 +23,6 @@ import {
 
 // Maximum number of historical sensor values to retain
 const MAX_SIZE = 1000;
-
-// Some values such as sensor readings are stored in a mutable array in a ref so that
-// they are not subject to the React render cycle, for performance reasons.
-// The Context is to make them easy to access from nested components.
-const WebUIDataContext = React.createContext();
 
 // Returned `defaults` property will be undefined if the defaults are loading or reloading.
 // Call `reloadDefaults` to clear the defaults and reload from the server.
@@ -82,6 +77,8 @@ function useDefaults() {
 function useWsConnection({ defaults, onCloseWs }) {
   const [isWsReady, setIsWsReady] = useState(false);
 
+  // Some values such as sensor readings are stored in a mutable array in a ref so that
+  // they are not subject to the React render cycle, for performance reasons.
   const webUIDataRef = useRef({
 
     // A history of the past 'MAX_SIZE' values fetched from the backend.
@@ -179,10 +176,10 @@ function useWsConnection({ defaults, onCloseWs }) {
 function ValueMonitor(props) {
   const index = parseInt(props.index)
   const emit = props.emit;
+  const webUIDataRef = props.webUIDataRef;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
-  const webUIDataRef = useContext(WebUIDataContext);
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
 
@@ -386,13 +383,13 @@ function ValueMonitor(props) {
 }
 
 function ValueMonitors(props) {
-  const { emit, numSensors} = props;
+  const { emit, numSensors, webUIDataRef} = props;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
           {[...Array(numSensors).keys()].map(index => (
-          	<ValueMonitor emit={emit} index={index} key={index} />)
+          	<ValueMonitor emit={emit} index={index} key={index} webUIDataRef={webUIDataRef} />)
           )}
         </Row>
       </Container>
@@ -400,11 +397,11 @@ function ValueMonitors(props) {
   );
 }
 
-function Plot() {
+function Plot(props) {
   const canvasRef = React.useRef(null);
   const colors = ['red', 'orange', 'green', 'blue'];
   const display = [true, true, true, true];
-  const webUIDataRef = useContext(WebUIDataContext);
+  const webUIDataRef = props.webUIDataRef;
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
 
@@ -615,57 +612,55 @@ function FSRWebUI(props) {
   }
 
   return (
-    <WebUIDataContext.Provider value={webUIDataRef}>
-      <div className="App">
-        <Router>
-          <Navbar bg="light">
-            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
-            <Nav>
-              <Nav.Item>
-                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
-              </Nav.Item>
-            </Nav>
-            <Nav className="ml-auto">
-              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-                {profiles.map(function(profile) {
-                  if (profile === activeProfile) {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile} active>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  } else {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile}>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  }
-                })}
-                <NavDropdown.Divider />
-                <Form inline onSubmit={(e) => e.preventDefault()}>
-                  <Form.Control
-                      onKeyDown={AddProfile}
-                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
-                      type="text"
-                      placeholder="New Profile" />
-                </Form>
-              </NavDropdown>
-            </Nav>
-          </Navbar>
-          <Switch>
-            <Route exact path="/">
-              <ValueMonitors emit={emit} numSensors={numSensors} />
-            </Route>
-            <Route path="/plot">
-              <Plot />
-            </Route>
-          </Switch>
-        </Router>
-      </div>
-    </WebUIDataContext.Provider>
+    <div className="App">
+      <Router>
+        <Navbar bg="light">
+          <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+          <Nav>
+            <Nav.Item>
+              <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+            </Nav.Item>
+          </Nav>
+          <Nav className="ml-auto">
+            <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+              {profiles.map(function(profile) {
+                if (profile === activeProfile) {
+                  return(
+                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                        onClick={ChangeProfile} active>
+                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                    </NavDropdown.Item>
+                  );
+                } else {
+                  return(
+                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                        onClick={ChangeProfile}>
+                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                    </NavDropdown.Item>
+                  );
+                }
+              })}
+              <NavDropdown.Divider />
+              <Form inline onSubmit={(e) => e.preventDefault()}>
+                <Form.Control
+                    onKeyDown={AddProfile}
+                    style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                    type="text"
+                    placeholder="New Profile" />
+              </Form>
+            </NavDropdown>
+          </Nav>
+        </Navbar>
+        <Switch>
+          <Route exact path="/">
+            <ValueMonitors emit={emit} numSensors={numSensors} webUIDataRef={webUIDataRef} />
+          </Route>
+          <Route path="/plot">
+            <Plot webUIDataRef={webUIDataRef} />
+          </Route>
+        </Switch>
+      </Router>
+    </div>
   );
 }
 
