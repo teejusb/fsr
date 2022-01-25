@@ -24,11 +24,10 @@ import {
 // Maximum number of historical sensor values to retain
 const MAX_SIZE = 1000;
 
-// Reference to history of current sensor values.
-// The values are stored in a mutable array in a ref so that they are not
-// subject to the React render cycle, for performance reasons.
+// Some values such as sensor readings are stored in a mutable array in a ref so that
+// they are not subject to the React render cycle, for performance reasons.
 // The Context is to make them easy to access from nested components.
-const CurValuesRefContext = React.createContext();
+const WebUIDataContext = React.createContext();
 
 // Returned `defaults` property will be undefined if the defaults are loading or reloading.
 // Call `reloadDefaults` to clear the defaults and reload from the server.
@@ -68,28 +67,31 @@ function useDefaults() {
   return { defaults, reloadDefaults };
 }
 
-// returns { curValuesRef, emit, isWsReady, wsCallbacksRef }
-// curValuesRef tracks values as well as thresholds.
+// returns { emit, isWsReady, webUIDataRef, wsCallbacksRef }
+// webUIDataRef tracks values as well as thresholds.
 // Use emit to send events to the server.
 // isWsReady indicates that the websocket is connected and has received
 // its first values reading from the server.
+
 // onCloseWs is called when the websocket closes for any reason,
 // unless the hooks is already doing effect cleanup.
+
+// defaults is expected to be undefined if defaults are loading or reloading.
 // The expectation is that onCloseWs is used to reload default thresholds
 // and provide new ones to trigger a new connection.
 function useWsConnection({ defaults, onCloseWs }) {
   const [isWsReady, setIsWsReady] = useState(false);
 
-  const curValuesRef = useRef({
+  const webUIDataRef = useRef({
 
     // A history of the past 'MAX_SIZE' values fetched from the backend.
     // Used for plotting and displaying live values.
     // We use a cyclical array to save memory.
-    kCurValues: [],
+    curValues: [],
     oldest: 0,
 
     // Keep track of the current thresholds fetched from the backend.
-    kCurThresholds: [],
+    curThresholds: [],
   });
 
   const wsRef = useRef();
@@ -105,14 +107,14 @@ function useWsConnection({ defaults, onCloseWs }) {
   }, [isWsReady, wsRef]);
 
   wsCallbacksRef.current.values = function(msg) {
-    const curValues = curValuesRef.current;
-    if (curValues.kCurValues.length < MAX_SIZE) {
-      curValues.kCurValues.push(msg.values);
+    const webUIData = webUIDataRef.current;
+    if (webUIData.curValues.length < MAX_SIZE) {
+      webUIData.curValues.push(msg.values);
     } else {
-      curValues.kCurValues[curValues.oldest] = msg.values;
-      curValues.oldest = (curValues.oldest + 1) % MAX_SIZE;
+      webUIData.curValues[webUIData.oldest] = msg.values;
+      webUIData.oldest = (webUIData.oldest + 1) % MAX_SIZE;
     }
-    if (curValues.kCurValues.length === 1) {
+    if (webUIData.curValues.length === 1) {
       // WebSocket is considered ready after it gets its first "values" message.
       setIsWsReady(true);
     }
@@ -120,13 +122,13 @@ function useWsConnection({ defaults, onCloseWs }) {
 
   wsCallbacksRef.current.thresholds = function(msg) {
     // Modify thresholds array in place instead of replacing it so that animation loops can have a stable reference.
-    curValuesRef.current.kCurThresholds.length = 0;
-    curValuesRef.current.kCurThresholds.push(...msg.thresholds);
+    webUIDataRef.current.curThresholds.length = 0;
+    webUIDataRef.current.curThresholds.push(...msg.thresholds);
   };
 
   useEffect(() => {
     let cleaningUp = false;
-    const curValues = curValuesRef.current;
+    const webUIData = webUIDataRef.current;
 
     if (!defaults) {
       // If defaults are loading or reloading, don't connect.
@@ -134,10 +136,10 @@ function useWsConnection({ defaults, onCloseWs }) {
     }
 
     // Ensure values history is empty and default thresholds are set.
-    curValues.kCurValues.length = 0;
-    curValues.oldest = 0;
-    curValuesRef.current.kCurThresholds.length = 0;
-    curValuesRef.current.kCurThresholds.push(...defaults.thresholds);
+    webUIData.curValues.length = 0;
+    webUIData.oldest = 0;
+    webUIDataRef.current.curThresholds.length = 0;
+    webUIDataRef.current.curThresholds.push(...defaults.thresholds);
 
     const ws = new WebSocket('ws://' + window.location.host + '/ws');
     wsRef.current = ws;
@@ -169,7 +171,7 @@ function useWsConnection({ defaults, onCloseWs }) {
     };
   }, [defaults, onCloseWs]);
 
-  return { curValuesRef, emit, isWsReady, wsCallbacksRef };
+  return { emit, isWsReady, webUIDataRef, wsCallbacksRef };
 }
 
 // An interactive display of the current values obtained by the backend.
@@ -180,30 +182,30 @@ function ValueMonitor(props) {
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
-  const curValuesRef = useContext(CurValuesRefContext);
-  const kCurValues = curValuesRef.current.kCurValues;
-  const kCurThresholds = curValuesRef.current.kCurThresholds;
+  const webUIDataRef = useContext(WebUIDataContext);
+  const curValues = webUIDataRef.current.curValues;
+  const curThresholds = webUIDataRef.current.curThresholds;
 
   function EmitValue(val) {
     // Send back all the thresholds instead of a single value per sensor. This is in case
     // the server restarts where it would be nicer to have all the values in sync.
     // Still send back the index since we want to update only one value at a time
     // to the microcontroller.
-    emit(['update_threshold', kCurThresholds, index]);
+    emit(['update_threshold', curThresholds, index]);
   }
 
   function Decrement(e) {
-    const val = kCurThresholds[index] - 1;
+    const val = curThresholds[index] - 1;
     if (val >= 0) {
-      kCurThresholds[index] = val;
+      curThresholds[index] = val;
       EmitValue(val);
     }
   }
 
   function Increment(e) {
-    const val = kCurThresholds[index] + 1;
+    const val = curThresholds[index] + 1;
     if (val <= 1023) {
-      kCurThresholds[index] = val
+      curThresholds[index] = val
       EmitValue(val);
     }
   }
@@ -237,39 +239,39 @@ function ValueMonitor(props) {
     // Mouse Events
     canvas.addEventListener('mousedown', function(e) {
       let pos = getMousePos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+      curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       is_drag = true;
     });
 
     canvas.addEventListener('mouseup', function(e) {
-      EmitValue(kCurThresholds[index]);
+      EmitValue(curThresholds[index]);
       is_drag = false;
     });
 
     canvas.addEventListener('mousemove', function(e) {
       if (is_drag) {
         let pos = getMousePos(canvas, e);
-        kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+        curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       }
     });
 
     // Touch Events
     canvas.addEventListener('touchstart', function(e) {
       let pos = getTouchPos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+      curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       is_drag = true;
     });
 
     canvas.addEventListener('touchend', function(e) {
       // We don't need to get the 
-      EmitValue(kCurThresholds[index]);
+      EmitValue(curThresholds[index]);
       is_drag = false;
     });
 
     canvas.addEventListener('touchmove', function(e) {
       if (is_drag) {
         let pos = getTouchPos(canvas, e);
-        kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+        curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       }
     });
 
@@ -294,7 +296,7 @@ function ValueMonitor(props) {
     var previousTimestamp;
 
     const render = (timestamp) => {
-      const oldest = curValuesRef.current.oldest;
+      const oldest = webUIDataRef.current.oldest;
 
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
@@ -305,15 +307,15 @@ function ValueMonitor(props) {
       // Get the latest value. This is either last element in the list, or based off of
       // the circular array.
       let currentValue = 0;
-      if (kCurValues.length < MAX_SIZE) {
-        currentValue = kCurValues[kCurValues.length-1][index];
+      if (curValues.length < MAX_SIZE) {
+        currentValue = curValues[curValues.length-1][index];
       } else {
-        currentValue = kCurValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][index];
+        currentValue = curValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][index];
       }
 
       // Add background fill.
       let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
-      if (currentValue >= kCurThresholds[index]) {
+      if (currentValue >= curThresholds[index]) {
         grd.addColorStop(0, 'lightblue');
         grd.addColorStop(1, 'blue');
       } else {
@@ -337,20 +339,20 @@ function ValueMonitor(props) {
 
       // Threshold Line
       const threshold_height = 3
-      const threshold_pos = (1023-kCurThresholds[index])/1023 * canvas.height;
+      const threshold_pos = (1023-curThresholds[index])/1023 * canvas.height;
       ctx.fillStyle = "black";
       ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2), canvas.width, threshold_height);
 
       // Threshold Label
-      thresholdLabel.innerText = kCurThresholds[index];
+      thresholdLabel.innerText = curThresholds[index];
       ctx.font = "30px " + bodyFontFamily;
       ctx.fillStyle = "black";
-      if (kCurThresholds[index] > 990) {
+      if (curThresholds[index] > 990) {
         ctx.textBaseline = 'top';
       } else {
         ctx.textBaseline = 'bottom';
       }
-      ctx.fillText(kCurThresholds[index].toString(), 0, threshold_pos + threshold_height + 1);
+      ctx.fillText(curThresholds[index].toString(), 0, threshold_pos + threshold_height + 1);
 
       requestId = requestAnimationFrame(render);
     };
@@ -402,9 +404,9 @@ function Plot() {
   const canvasRef = React.useRef(null);
   const colors = ['red', 'orange', 'green', 'blue'];
   const display = [true, true, true, true];
-  const curValuesRef = useContext(CurValuesRefContext);
-  const kCurValues = curValuesRef.current.kCurValues;
-  const kCurThresholds = curValuesRef.current.kCurThresholds;
+  const webUIDataRef = useContext(WebUIDataContext);
+  const curValues = webUIDataRef.current.curValues;
+  const curThresholds = webUIDataRef.current.curThresholds;
 
   useEffect(() => {
     let requestId;
@@ -438,7 +440,7 @@ function Plot() {
     var previousTimestamp;
 
     const render = (timestamp) => {
-      const oldest = curValuesRef.current.oldest;
+      const oldest = webUIDataRef.current.oldest;
 
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
@@ -479,13 +481,13 @@ function Plot() {
           ctx.strokeStyle = colors[i];
           ctx.lineWidth = 2;
           for (let j = 0; j < MAX_SIZE; ++j) {
-            if (j === kCurValues.length) { break; }
+            if (j === curValues.length) { break; }
             if (j === 0) {
               ctx.moveTo(spacing,
-                box_height - box_height * kCurValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             } else {
               ctx.lineTo(px_per_div*j + spacing,
-                box_height - box_height * kCurValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             }
           }
           ctx.stroke();
@@ -499,8 +501,8 @@ function Plot() {
           ctx.setLineDash([]);
           ctx.strokeStyle = 'dark' + colors[i];
           ctx.lineWidth = 2;
-          ctx.moveTo(spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
-          ctx.lineTo(box_width + spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
+          ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
+          ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.stroke();
         }
       }
@@ -510,11 +512,11 @@ function Plot() {
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.fillStyle = colors[i];
-          if (kCurValues.length < MAX_SIZE) {
-            ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
+          if (curValues.length < MAX_SIZE) {
+            ctx.fillText(curValues[curValues.length-1][i], 100 + i * 100, 100);
           } else {
             ctx.fillText(
-              kCurValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][i], 100 + i * 100, 100);
+              curValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][i], 100 + i * 100, 100);
           }
         }
       }
@@ -528,7 +530,7 @@ function Plot() {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, curValuesRef, display, kCurThresholds, kCurValues]);
+  }, [colors, curThresholds, curValues, display, webUIDataRef]);
 
   function ToggleLine(index) {
     display[index] = !display[index];
@@ -570,7 +572,7 @@ function Plot() {
 }
 
 function FSRWebUI(props) {
-  const { curValuesRef, emit, defaults, wsCallbacksRef } = props;
+  const { emit, defaults, webUIDataRef, wsCallbacksRef } = props;
   const numSensors = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
@@ -593,7 +595,7 @@ function FSRWebUI(props) {
   function AddProfile(e) {
     // Only add a profile on the enter key.
     if (e.keyCode === 13) {
-      emit(['add_profile', e.target.value, curValuesRef.current.kCurThresholds]);
+      emit(['add_profile', e.target.value, webUIDataRef.current.curThresholds]);
       // Reset the text box.
       e.target.value = "";
     }
@@ -613,7 +615,7 @@ function FSRWebUI(props) {
   }
 
   return (
-    <CurValuesRefContext.Provider value={curValuesRef}>
+    <WebUIDataContext.Provider value={webUIDataRef}>
       <div className="App">
         <Router>
           <Navbar bg="light">
@@ -663,7 +665,7 @@ function FSRWebUI(props) {
           </Switch>
         </Router>
       </div>
-    </CurValuesRefContext.Provider>
+    </WebUIDataContext.Provider>
   );
 }
 
@@ -689,18 +691,18 @@ function LoadingScreen() {
 function App() {
   const { defaults, reloadDefaults } = useDefaults();
   const {
-    curValuesRef,
     emit,
     isWsReady,
+    webUIDataRef,
     wsCallbacksRef
   } = useWsConnection({ defaults, onCloseWs: reloadDefaults });
 
   if (defaults && isWsReady) {
     return (
       <FSRWebUI
-        curValuesRef={curValuesRef}
         defaults={defaults}
         emit={emit}
+        webUIDataRef={webUIDataRef}
         wsCallbacksRef={wsCallbacksRef}
       />
     );
