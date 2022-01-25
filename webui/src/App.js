@@ -111,10 +111,6 @@ function useWsConnection({ defaults, onCloseWs }) {
       webUIData.curValues[webUIData.oldest] = msg.values;
       webUIData.oldest = (webUIData.oldest + 1) % MAX_SIZE;
     }
-    if (webUIData.curValues.length === 1) {
-      // WebSocket is considered ready after it gets its first "values" message.
-      setIsWsReady(true);
-    }
   };
 
   wsCallbacksRef.current.thresholds = function(msg) {
@@ -132,8 +128,9 @@ function useWsConnection({ defaults, onCloseWs }) {
       return;
     }
 
-    // Ensure values history is empty and default thresholds are set.
+    // Ensure values history reset and default thresholds are set.
     webUIData.curValues.length = 0;
+    webUIData.curValues.push(new Array(defaults.thresholds.length).fill(0));
     webUIData.oldest = 0;
     webUIDataRef.current.curThresholds.length = 0;
     webUIDataRef.current.curThresholds.push(...defaults.thresholds);
@@ -141,6 +138,10 @@ function useWsConnection({ defaults, onCloseWs }) {
     const ws = new WebSocket('ws://' + window.location.host + '/ws');
     wsRef.current = ws;
 
+    ws.addEventListener('open', function(ev) {
+      setIsWsReady(true);
+    });
+    
     ws.addEventListener('error', function(ev) {
       ws.close();
     });
