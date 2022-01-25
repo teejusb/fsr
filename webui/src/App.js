@@ -22,7 +22,7 @@ import {
 } from "react-router-dom";
 
 // Maximum number of historical sensor values to retain
-const max_size = 1000;
+const MAX_SIZE = 1000;
 
 // Reference to history of current sensor values.
 // The values are stored in a mutable array in a ref so that they are not
@@ -82,7 +82,7 @@ function useWsConnection({ defaults, onCloseWs }) {
 
   const curValuesRef = useRef({
 
-    // A history of the past 'max_size' values fetched from the backend.
+    // A history of the past 'MAX_SIZE' values fetched from the backend.
     // Used for plotting and displaying live values.
     // We use a cyclical array to save memory.
     kCurValues: [],
@@ -106,11 +106,11 @@ function useWsConnection({ defaults, onCloseWs }) {
 
   wsCallbacksRef.current.values = function(msg) {
     const curValues = curValuesRef.current;
-    if (curValues.kCurValues.length < max_size) {
+    if (curValues.kCurValues.length < MAX_SIZE) {
       curValues.kCurValues.push(msg.values);
     } else {
       curValues.kCurValues[curValues.oldest] = msg.values;
-      curValues.oldest = (curValues.oldest + 1) % max_size;
+      curValues.oldest = (curValues.oldest + 1) % MAX_SIZE;
     }
     if (curValues.kCurValues.length === 1) {
       // WebSocket is considered ready after it gets its first "values" message.
@@ -305,10 +305,10 @@ function ValueMonitor(props) {
       // Get the latest value. This is either last element in the list, or based off of
       // the circular array.
       let currentValue = 0;
-      if (kCurValues.length < max_size) {
+      if (kCurValues.length < MAX_SIZE) {
         currentValue = kCurValues[kCurValues.length-1][index];
       } else {
-        currentValue = kCurValues[((oldest - 1) % max_size + max_size) % max_size][index];
+        currentValue = kCurValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][index];
       }
 
       // Add background fill.
@@ -471,21 +471,21 @@ function Plot() {
       }
 
       // Plot the line graph for each of the sensors.
-      const px_per_div = box_width/max_size;
+      const px_per_div = box_width/MAX_SIZE;
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
           ctx.strokeStyle = colors[i];
           ctx.lineWidth = 2;
-          for (let j = 0; j < max_size; ++j) {
+          for (let j = 0; j < MAX_SIZE; ++j) {
             if (j === kCurValues.length) { break; }
             if (j === 0) {
               ctx.moveTo(spacing,
-                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+                box_height - box_height * kCurValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             } else {
               ctx.lineTo(px_per_div*j + spacing,
-                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+                box_height - box_height * kCurValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             }
           }
           ctx.stroke();
@@ -510,11 +510,11 @@ function Plot() {
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.fillStyle = colors[i];
-          if (kCurValues.length < max_size) {
+          if (kCurValues.length < MAX_SIZE) {
             ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
           } else {
             ctx.fillText(
-              kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+              kCurValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][i], 100 + i * 100, 100);
           }
         }
       }
