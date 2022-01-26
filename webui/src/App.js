@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 import logo from './logo.svg';
 import './App.css';
@@ -21,107 +21,187 @@ import {
   Link
 } from "react-router-dom";
 
-// Amount of panels.
-const num_panels = 4;
+// Maximum number of historical sensor values to retain
+const MAX_SIZE = 1000;
 
-// Keep track of the current thresholds fetched from the backend.
-// Make it global since it's used by many components.
-let kCurThresholds = new Array(num_panels).fill(0);
+// Returned `defaults` property will be undefined if the defaults are loading or reloading.
+// Call `reloadDefaults` to clear the defaults and reload from the server.
+function useDefaults() {
+  const [defaults, setDefaults] = useState(undefined);
 
-// A history of the past 'max_size' values fetched from the backend.
-// Used for plotting and displaying live values.
-// We use a cyclical array to save memory.
-let kCurValues = [new Array(num_panels).fill(0)];
-const max_size = 1000;
-let oldest = 0;
+  const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
 
-var ws;
-const wsCallbacks = {};
-const wsQueue = [];
+  // Load defaults at mount and reload any time they are cleared.
+  useEffect(() => {
+    let cleaningUp = false;
+    let timeoutId = 0;
 
-function connect() {
-  ws = new WebSocket('ws://' + window.location.host + '/ws');
-
-  ws.addEventListener('open', function(ev) {
-    while (wsQueue.length > 0 && ws.readyState === 1) {
-      let msg = wsQueue.shift();
-      ws.send(JSON.stringify(msg));
+    const getDefaults = () => {
+      clearTimeout(timeoutId);
+      fetch('/defaults').then(res => res.json()).then(data => {
+        if (!cleaningUp) {
+          setDefaults(data);
+        }
+      }).catch(reason => {
+        if (!cleaningUp) {
+          timeoutId = setTimeout(getDefaults, 1000);
+        }
+      });
     }
-  });
 
-  ws.addEventListener('error', function(ev) {
-    ws.close();
-  });
-
-  ws.addEventListener('close', function(ev) {
-    setTimeout(connect, 1000);
-  });
-
-  ws.addEventListener('message', function(ev) {
-    const data = JSON.parse(ev.data)
-    const action = data[0];
-    const msg = data[1];
-
-    if (wsCallbacks[action]) {
-      wsCallbacks[action](msg);
+    if (!defaults) {
+      getDefaults();
     }
-  });
+
+    return () => {
+      cleaningUp = true;
+      clearTimeout(timeoutId);
+    };
+  }, [defaults]);
+
+  return { defaults, reloadDefaults };
 }
 
-function emit(msg) {
-  // Queue the message if the websocket connection is not ready yet.
-  // The states are CONNECTING (0), OPEN (1), CLOSING (2) and CLOSED (3).
-  if (ws.readyState !== 1 /* OPEN */) {
-    wsQueue.push(ws);
-    return;
-  }
+// returns { emit, isWsReady, webUIDataRef, wsCallbacksRef }
+// webUIDataRef tracks values as well as thresholds.
+// Use emit to send events to the server.
+// isWsReady indicates that the websocket is connected and has received
+// its first values reading from the server.
 
-  ws.send(JSON.stringify(msg));
+// onCloseWs is called when the websocket closes for any reason,
+// unless the hooks is already doing effect cleanup.
+
+// defaults is expected to be undefined if defaults are loading or reloading.
+// The expectation is that onCloseWs is used to reload default thresholds
+// and provide new ones to trigger a new connection.
+function useWsConnection({ defaults, onCloseWs }) {
+  const [isWsReady, setIsWsReady] = useState(false);
+
+  // Some values such as sensor readings are stored in a mutable array in a ref so that
+  // they are not subject to the React render cycle, for performance reasons.
+  const webUIDataRef = useRef({
+
+    // A history of the past 'MAX_SIZE' values fetched from the backend.
+    // Used for plotting and displaying live values.
+    // We use a cyclical array to save memory.
+    curValues: [],
+    oldest: 0,
+
+    // Keep track of the current thresholds fetched from the backend.
+    curThresholds: [],
+  });
+
+  const wsRef = useRef();
+  const wsCallbacksRef = useRef({});
+
+  const emit = useCallback((msg) => {
+    // App should wait for isWsReady to send messages.
+    if (!wsRef.current || !isWsReady) {
+      throw new Error("emit() called when isWsReady !== true.");
+    }
+
+    wsRef.current.send(JSON.stringify(msg));
+  }, [isWsReady, wsRef]);
+
+  wsCallbacksRef.current.values = function(msg) {
+    const webUIData = webUIDataRef.current;
+    if (webUIData.curValues.length < MAX_SIZE) {
+      webUIData.curValues.push(msg.values);
+    } else {
+      webUIData.curValues[webUIData.oldest] = msg.values;
+      webUIData.oldest = (webUIData.oldest + 1) % MAX_SIZE;
+    }
+  };
+
+  wsCallbacksRef.current.thresholds = function(msg) {
+    // Modify thresholds array in place instead of replacing it so that animation loops can have a stable reference.
+    webUIDataRef.current.curThresholds.length = 0;
+    webUIDataRef.current.curThresholds.push(...msg.thresholds);
+  };
+
+  useEffect(() => {
+    let cleaningUp = false;
+    const webUIData = webUIDataRef.current;
+
+    if (!defaults) {
+      // If defaults are loading or reloading, don't connect.
+      return;
+    }
+
+    // Ensure values history reset and default thresholds are set.
+    webUIData.curValues.length = 0;
+    webUIData.curValues.push(new Array(defaults.thresholds.length).fill(0));
+    webUIData.oldest = 0;
+    webUIDataRef.current.curThresholds.length = 0;
+    webUIDataRef.current.curThresholds.push(...defaults.thresholds);
+
+    const ws = new WebSocket('ws://' + window.location.host + '/ws');
+    wsRef.current = ws;
+
+    ws.addEventListener('open', function(ev) {
+      setIsWsReady(true);
+    });
+    
+    ws.addEventListener('error', function(ev) {
+      ws.close();
+    });
+
+    ws.addEventListener('close', function(ev) {
+      if (!cleaningUp) {
+        onCloseWs();
+      }
+    });
+
+    ws.addEventListener('message', function(ev) {
+      const data = JSON.parse(ev.data)
+      const action = data[0];
+      const msg = data[1];
+
+      if (wsCallbacksRef.current[action]) {
+        wsCallbacksRef.current[action](msg);
+      }
+    });
+
+    return () => {
+      cleaningUp = true;
+      setIsWsReady(false);
+      ws.close();
+    };
+  }, [defaults, onCloseWs]);
+
+  return { emit, isWsReady, webUIDataRef, wsCallbacksRef };
 }
-
-wsCallbacks.values = function(msg) {
-  if (kCurValues.length < max_size) {
-    kCurValues.push(msg.values);
-  } else {
-    kCurValues[oldest] = msg.values;
-    oldest = (oldest + 1) % max_size;
-  }
-};
-
-wsCallbacks.thresholds = function(msg) {
-  kCurThresholds = msg.thresholds;
-};
-
-connect();
 
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 function ValueMonitor(props) {
-  const index = parseInt(props.index)
+  const { emit, index, webUIDataRef } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
+  const curValues = webUIDataRef.current.curValues;
+  const curThresholds = webUIDataRef.current.curThresholds;
 
-  function EmitValue(val) {
+  const EmitValue = useCallback((val) => {
     // Send back all the thresholds instead of a single value per sensor. This is in case
     // the server restarts where it would be nicer to have all the values in sync.
     // Still send back the index since we want to update only one value at a time
     // to the microcontroller.
-    emit(['update_threshold', kCurThresholds, index]);
-  }
+    emit(['update_threshold', curThresholds, index]);
+  }, [curThresholds, emit, index])
 
   function Decrement(e) {
-    const val = kCurThresholds[index] - 1;
+    const val = curThresholds[index] - 1;
     if (val >= 0) {
-      kCurThresholds[index] = val;
+      curThresholds[index] = val;
       EmitValue(val);
     }
   }
 
   function Increment(e) {
-    const val = kCurThresholds[index] + 1;
+    const val = curThresholds[index] + 1;
     if (val <= 1023) {
-      kCurThresholds[index] = val
+      curThresholds[index] = val
       EmitValue(val);
     }
   }
@@ -155,39 +235,39 @@ function ValueMonitor(props) {
     // Mouse Events
     canvas.addEventListener('mousedown', function(e) {
       let pos = getMousePos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+      curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       is_drag = true;
     });
 
     canvas.addEventListener('mouseup', function(e) {
-      EmitValue(kCurThresholds[index]);
+      EmitValue(curThresholds[index]);
       is_drag = false;
     });
 
     canvas.addEventListener('mousemove', function(e) {
       if (is_drag) {
         let pos = getMousePos(canvas, e);
-        kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+        curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       }
     });
 
     // Touch Events
     canvas.addEventListener('touchstart', function(e) {
       let pos = getTouchPos(canvas, e);
-      kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+      curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       is_drag = true;
     });
 
     canvas.addEventListener('touchend', function(e) {
       // We don't need to get the 
-      EmitValue(kCurThresholds[index]);
+      EmitValue(curThresholds[index]);
       is_drag = false;
     });
 
     canvas.addEventListener('touchmove', function(e) {
       if (is_drag) {
         let pos = getTouchPos(canvas, e);
-        kCurThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
+        curThresholds[index] = Math.floor(1023 - pos.y/canvas.height * 1023);
       }
     });
 
@@ -212,6 +292,8 @@ function ValueMonitor(props) {
     var previousTimestamp;
 
     const render = (timestamp) => {
+      const oldest = webUIDataRef.current.oldest;
+
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
         return;
@@ -221,15 +303,15 @@ function ValueMonitor(props) {
       // Get the latest value. This is either last element in the list, or based off of
       // the circular array.
       let currentValue = 0;
-      if (kCurValues.length < max_size) {
-        currentValue = kCurValues[kCurValues.length-1][index];
+      if (curValues.length < MAX_SIZE) {
+        currentValue = curValues[curValues.length-1][index];
       } else {
-        currentValue = kCurValues[((oldest - 1) % max_size + max_size) % max_size][index];
+        currentValue = curValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][index];
       }
 
       // Add background fill.
       let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
-      if (currentValue >= kCurThresholds[index]) {
+      if (currentValue >= curThresholds[index]) {
         grd.addColorStop(0, 'lightblue');
         grd.addColorStop(1, 'blue');
       } else {
@@ -253,20 +335,20 @@ function ValueMonitor(props) {
 
       // Threshold Line
       const threshold_height = 3
-      const threshold_pos = (1023-kCurThresholds[index])/1023 * canvas.height;
+      const threshold_pos = (1023-curThresholds[index])/1023 * canvas.height;
       ctx.fillStyle = "black";
       ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2), canvas.width, threshold_height);
 
       // Threshold Label
-      thresholdLabel.innerText = kCurThresholds[index];
+      thresholdLabel.innerText = curThresholds[index];
       ctx.font = "30px " + bodyFontFamily;
       ctx.fillStyle = "black";
-      if (kCurThresholds[index] > 990) {
+      if (curThresholds[index] > 990) {
         ctx.textBaseline = 'top';
       } else {
         ctx.textBaseline = 'bottom';
       }
-      ctx.fillText(kCurThresholds[index].toString(), 0, threshold_pos + threshold_height + 1);
+      ctx.fillText(curThresholds[index].toString(), 0, threshold_pos + threshold_height + 1);
 
       requestId = requestAnimationFrame(render);
     };
@@ -277,11 +359,7 @@ function ValueMonitor(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  // Intentionally disable the lint errors.
-  // EmitValue and index don't need to be in the dependency list as we only want this to 
-  // run once. The canvas will automatically update via requestAnimationFrame.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [EmitValue, curThresholds, curValues, index, webUIDataRef]);
 
   return(
     <Col style={{height: '75vh', paddingTop: '1vh'}}>
@@ -299,13 +377,14 @@ function ValueMonitor(props) {
   );
 }
 
-function WebUI() {
+function ValueMonitors(props) {
+  const { emit, numSensors, webUIDataRef} = props;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
         <Row>
-          {[...Array(num_panels).keys()].map(value_monitor => (
-          	<ValueMonitor index={value_monitor}/>)
+          {[...Array(numSensors).keys()].map(index => (
+          	<ValueMonitor emit={emit} index={index} key={index} webUIDataRef={webUIDataRef} />)
           )}
         </Row>
       </Container>
@@ -313,10 +392,13 @@ function WebUI() {
   );
 }
 
-function Plot() {
+function Plot(props) {
   const canvasRef = React.useRef(null);
   const colors = ['red', 'orange', 'green', 'blue'];
   const display = [true, true, true, true];
+  const webUIDataRef = props.webUIDataRef;
+  const curValues = webUIDataRef.current.curValues;
+  const curThresholds = webUIDataRef.current.curThresholds;
 
   useEffect(() => {
     let requestId;
@@ -350,6 +432,8 @@ function Plot() {
     var previousTimestamp;
 
     const render = (timestamp) => {
+      const oldest = webUIDataRef.current.oldest;
+
       if (previousTimestamp && (timestamp - previousTimestamp) < minFrameDurationMs) {
         requestId = requestAnimationFrame(render);
         return;
@@ -381,21 +465,21 @@ function Plot() {
       }
 
       // Plot the line graph for each of the sensors.
-      const px_per_div = box_width/max_size;
+      const px_per_div = box_width/MAX_SIZE;
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
           ctx.strokeStyle = colors[i];
           ctx.lineWidth = 2;
-          for (let j = 0; j < max_size; ++j) {
-            if (j === kCurValues.length) { break; }
+          for (let j = 0; j < MAX_SIZE; ++j) {
+            if (j === curValues.length) { break; }
             if (j === 0) {
               ctx.moveTo(spacing,
-                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             } else {
               ctx.lineTo(px_per_div*j + spacing,
-                box_height - box_height * kCurValues[(j + oldest) % max_size][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
             }
           }
           ctx.stroke();
@@ -409,8 +493,8 @@ function Plot() {
           ctx.setLineDash([]);
           ctx.strokeStyle = 'dark' + colors[i];
           ctx.lineWidth = 2;
-          ctx.moveTo(spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
-          ctx.lineTo(box_width + spacing, box_height - box_height * kCurThresholds[i]/1023 + spacing);
+          ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
+          ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.stroke();
         }
       }
@@ -420,11 +504,11 @@ function Plot() {
       for (let i = 0; i < 4; ++i) {
         if (display[i]) {
           ctx.fillStyle = colors[i];
-          if (kCurValues.length < max_size) {
-            ctx.fillText(kCurValues[kCurValues.length-1][i], 100 + i * 100, 100);
+          if (curValues.length < MAX_SIZE) {
+            ctx.fillText(curValues[curValues.length-1][i], 100 + i * 100, 100);
           } else {
             ctx.fillText(
-              kCurValues[((oldest - 1) % max_size + max_size) % max_size][i], 100 + i * 100, 100);
+              curValues[((oldest - 1) % MAX_SIZE + MAX_SIZE) % MAX_SIZE][i], 100 + i * 100, 100);
           }
         }
       }
@@ -438,7 +522,7 @@ function Plot() {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, display]);
+  }, [colors, curThresholds, curValues, display, webUIDataRef]);
 
   function ToggleLine(index) {
     display[index] = !display[index];
@@ -479,22 +563,13 @@ function Plot() {
   );
 }
 
-function App() {
-  const [fetched, setFetched] = useState(false);
-  const [profiles, setProfiles] = useState([]);
-  const [activeProfile, setActiveProfile] = useState('');
-
+function FSRWebUI(props) {
+  const { emit, defaults, webUIDataRef, wsCallbacksRef } = props;
+  const numSensors = defaults.thresholds.length;
+  const [profiles, setProfiles] = useState(defaults.profiles);
+  const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
   useEffect(() => {
-    // Fetch all the default values the first time we load the page.
-    // We will re-render after everything is fetched.
-    if (!fetched) {
-      fetch('/defaults').then(res => res.json()).then(data => {
-          setProfiles(data.profiles);
-          setActiveProfile(data.cur_profile);
-          kCurThresholds = data.thresholds;
-          setFetched(true);
-      });
-    }
+    const wsCallbacks = wsCallbacksRef.current;
 
     wsCallbacks.get_profiles = function(msg) {
       setProfiles(msg.profiles);
@@ -507,12 +582,12 @@ function App() {
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
     };
-  }, [fetched, profiles, activeProfile]);
+  }, [profiles, wsCallbacksRef]);
 
   function AddProfile(e) {
     // Only add a profile on the enter key.
     if (e.keyCode === 13) {
-      emit(['add_profile', e.target.value, kCurThresholds]);
+      emit(['add_profile', e.target.value, webUIDataRef.current.curThresholds]);
       // Reset the text box.
       e.target.value = "";
     }
@@ -531,61 +606,99 @@ function App() {
     emit(['change_profile', profile_name]);
   }
 
-  // Don't render anything until the defaults are fetched.
   return (
-    fetched ?
-      <div className="App">
-        <Router>
-          <Navbar bg="light">
-            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
-            <Nav>
-              <Nav.Item>
-                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
-              </Nav.Item>
-            </Nav>
-            <Nav className="ml-auto">
-              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-                {profiles.map(function(profile) {
-                  if (profile === activeProfile) {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile} active>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  } else {
-                    return(
-                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                          onClick={ChangeProfile}>
-                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                      </NavDropdown.Item>
-                    );
-                  }
-                })}
-                <NavDropdown.Divider />
-                <Form inline onSubmit={(e) => e.preventDefault()}>
-                  <Form.Control
-                      onKeyDown={AddProfile}
-                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
-                      type="text"
-                      placeholder="New Profile" />
-                </Form>
-              </NavDropdown>
-            </Nav>
-          </Navbar>
-          <Switch>
-            <Route exact path="/">
-              <WebUI />
-            </Route>
-            <Route path="/plot">
-              <Plot />
-            </Route>
-          </Switch>
-        </Router>
-      </div>
-    :
-    <></>
+    <div className="App">
+      <Router>
+        <Navbar bg="light">
+          <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+          <Nav>
+            <Nav.Item>
+              <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+            </Nav.Item>
+          </Nav>
+          <Nav className="ml-auto">
+            <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+              {profiles.map(function(profile) {
+                if (profile === activeProfile) {
+                  return(
+                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                        onClick={ChangeProfile} active>
+                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                    </NavDropdown.Item>
+                  );
+                } else {
+                  return(
+                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                        onClick={ChangeProfile}>
+                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                    </NavDropdown.Item>
+                  );
+                }
+              })}
+              <NavDropdown.Divider />
+              <Form inline onSubmit={(e) => e.preventDefault()}>
+                <Form.Control
+                    onKeyDown={AddProfile}
+                    style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                    type="text"
+                    placeholder="New Profile" />
+              </Form>
+            </NavDropdown>
+          </Nav>
+        </Navbar>
+        <Switch>
+          <Route exact path="/">
+            <ValueMonitors emit={emit} numSensors={numSensors} webUIDataRef={webUIDataRef} />
+          </Route>
+          <Route path="/plot">
+            <Plot webUIDataRef={webUIDataRef} />
+          </Route>
+        </Switch>
+      </Router>
+    </div>
   );
+}
+
+function LoadingScreen() {
+  return (
+    <div style={{ color: "white", height: "100vh", width: "100vw" }}>
+      <Navbar bg="light">
+        <Navbar.Brand as={"span"} to="/">FSR WebUI</Navbar.Brand>
+      </Navbar>
+      <div style={{
+        backgroundColor: "#282c34",
+        border: "1px solid white",
+        fontSize: "1.25rem",
+        padding: "0.5rem 1rem",
+        height: "96vh"
+      }}>
+        Connecting...
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const { defaults, reloadDefaults } = useDefaults();
+  const {
+    emit,
+    isWsReady,
+    webUIDataRef,
+    wsCallbacksRef
+  } = useWsConnection({ defaults, onCloseWs: reloadDefaults });
+
+  if (defaults && isWsReady) {
+    return (
+      <FSRWebUI
+        defaults={defaults}
+        emit={emit}
+        webUIDataRef={webUIDataRef}
+        wsCallbacksRef={wsCallbacksRef}
+      />
+    );
+  } else {
+    return <LoadingScreen />
+  }
 }
 
 export default App;
