@@ -486,22 +486,57 @@ class SerialProcessor {
     // {0, 1, 2, 3} + "0"-"1023"
     // e.g. 3180 (fourth FSR, change threshold to 180)
     
-    if (bytes_read < 2 || bytes_read > 5) { return; }
+    if (bytes_read < 2 || bytes_read > 6) { return; }
+
+    int16_t sensor_index = 0;
+    int16_t sensor_digits = 0;
+    if (bytes_read >= 2 && bytes_read <= 5) {
+      sensor_digits = 1;
+      sensor_index = buffer_[0] - '0';
+    }
+    else {
+      switch (buffer_[0] - '0') {
+        case 0:
+          sensor_index = 0;
+          break;
+        case 1:
+          sensor_index = 10;
+          break;
+        case 2:
+          sensor_index = 20;
+          break;
+        case 3:
+          sensor_index = 30;
+          break;
+        case 4:
+          sensor_index = 40;
+          break;
+        case 5:
+          sensor_index = 50;
+          break;
+        case 6:
+          sensor_index = 60;
+          break;
+        case 7:
+          sensor_index = 70;
+          break;
+        case 8:
+          sensor_index = 80;
+          break;
+        case 9:
+          sensor_index = 90;
+          break;
+      }
+
+      sensor_digits = 2;
+      sensor_index += buffer_[1] - '0';
+    }
     
-    size_t sensor_index = buffer_[0] - '0';
-    //this works for chars < '0' because they will
-    //also be > kNumSensors due to uint underflow.
-    if (sensor_index >= kNumSensors) { return; }
+    if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
 
     kSensors[sensor_index].UpdateThreshold(
-        strtoul(buffer_ + 1, nullptr, 10));
+        strtoul(buffer_ + sensor_digits, nullptr, 10));
     PrintThresholds();
-  }
-
-  void UpdateOffsets() {
-    for (size_t i = 0; i < kNumSensors; ++i) {
-      kSensors[i].UpdateOffset();
-    }
   }
 
   void PrintValues() {
