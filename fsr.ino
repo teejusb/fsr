@@ -50,7 +50,7 @@ const long kBaudRate = 115200;
 // Max number of sensors per panel.
 // NOTE(teejusb): This is arbitrary, if you need to support more sensors
 // per panel then just change the following number.
-const size_t kMaxSharedSensors = 2;
+const size_t kMaxSharedSensors = 4;
 // Button numbers should start with 1 (Button0 is not a valid Joystick input).
 // Automatically incremented when creating a new SensorState.
 uint8_t curButtonNum = 1;
@@ -445,51 +445,50 @@ class Sensor {
 //   Sensor(A4),
 // };
 
-//Sensor kSensors[] = {
-//  Sensor(A0),
-//  Sensor(A1),
-//  Sensor(A2),
-//  Sensor(A3),
-//};
-//const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
-
-CD74HC4067 mux1 = CD74HC4067(2,3,4,5);
-CD74HC4067 mux2 = CD74HC4067(6,7,8,9);
-
-SensorState panel_1;
-SensorState panel_3;
-SensorState panel_5;
-SensorState panel_7;
-SensorState panel_9;
-
 Sensor kSensors[] = {
-  Sensor(A10, &panel_1, &mux1, 1),
-  Sensor(A10, &panel_1, &mux1, 2),
-  Sensor(A10, &panel_1, &mux1, 3),
-  Sensor(A10, &panel_1, &mux1, 4),
-  
-  Sensor(A10, &panel_3, &mux1, 8),
-  Sensor(A10, &panel_3, &mux1, 9),
-  Sensor(A10, &panel_3, &mux1, 10),
-  Sensor(A10, &panel_3, &mux1, 11),
-
-  Sensor(A10, &panel_5, &mux1, 12),
-  Sensor(A10, &panel_5, &mux1, 13),
-  Sensor(A10, &panel_5, &mux1, 14),
-  Sensor(A10, &panel_5, &mux1, 15),
-  
-  Sensor(A11, &panel_7, &mux2, 1),
-  Sensor(A11, &panel_7, &mux2, 2),
-  Sensor(A11, &panel_7, &mux2, 3),
-  Sensor(A11, &panel_7, &mux2, 4),
-  
-  Sensor(A11, &panel_9, &mux2, 8),
-  Sensor(A11, &panel_9, &mux2, 9),
-  Sensor(A11, &panel_9, &mux2, 10),
-  Sensor(A11, &panel_9, &mux2, 11)
+  Sensor(A0),
+  Sensor(A1),
+  Sensor(A2),
+  Sensor(A3),
 };
+const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
-const int16_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
+//CD74HC4067 mux1 = CD74HC4067(2,3,4,5);
+//CD74HC4067 mux2 = CD74HC4067(6,7,8,9);
+//
+//SensorState state_1;
+//SensorState state_3;
+//SensorState state_5;
+//SensorState state_7;
+//SensorState state_9;
+//
+//Sensor kSensors[] = {
+//  Sensor(A10, &state_1, &mux1, 1),
+//  Sensor(A10, &state_1, &mux1, 2),
+//  Sensor(A10, &state_1, &mux1, 3),
+//  Sensor(A10, &state_1, &mux1, 4),
+//  
+//  Sensor(A10, &state_3, &mux1, 8),
+//  Sensor(A10, &state_3, &mux1, 9),
+//  Sensor(A10, &state_3, &mux1, 10),
+//  Sensor(A10, &state_3, &mux1, 11),
+//
+//  Sensor(A10, &state_5, &mux1, 12),
+//  Sensor(A10, &state_5, &mux1, 13),
+//  Sensor(A10, &state_5, &mux1, 14),
+//  Sensor(A10, &state_5, &mux1, 15),
+//  
+//  Sensor(A11, &state_7, &mux2, 1),
+//  Sensor(A11, &state_7, &mux2, 2),
+//  Sensor(A11, &state_7, &mux2, 3),
+//  Sensor(A11, &state_7, &mux2, 4),
+//  
+//  Sensor(A11, &state_9, &mux2, 8),
+//  Sensor(A11, &state_9, &mux2, 9),
+//  Sensor(A11, &state_9, &mux2, 10),
+//  Sensor(A11, &state_9, &mux2, 11)
+//};
+//const int16_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
 /*===========================================================================*/
 
