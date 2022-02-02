@@ -175,11 +175,11 @@ class SerialHandler(object):
 
     try:
       self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
-      if self.ser:
-        # Apply currently loaded thresholds when the microcontroller connects.
-        for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold).zfill(4) + '\n'
-          self.write_queue.put(threshold_cmd, block=False)
+      # if self.ser:
+      #   # Apply currently loaded thresholds when the microcontroller connects.
+      #   for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
+      #     threshold_cmd = str(sensor_numbers[i]) + str(threshold).zfill(4) + '\n'
+      #     self.write_queue.put(threshold_cmd, block=False)
     except queue.Full as e:
       logger.error('Could not set thresholds. Queue full.')
     except serial.SerialException as e:
@@ -353,7 +353,7 @@ async def get_ws(request):
 
   # Potentially fetch any threshold values from the microcontroller that
   # may be out of sync with our profiles.
-  serial_handler.write_queue.put('t\n', block=False)
+  # serial_handler.write_queue.put('t\n', block=False)
 
   queue = asyncio.Queue(maxsize=100)
   with out_queues_lock:
