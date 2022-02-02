@@ -178,7 +178,7 @@ class SerialHandler(object):
       if self.ser:
         # Apply currently loaded thresholds when the microcontroller connects.
         for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
+          threshold_cmd = str(sensor_numbers[i]) + str(threshold).zfill(4) + '\n'
           self.write_queue.put(threshold_cmd, block=False)
     except queue.Full as e:
       logger.error('Could not set thresholds. Queue full.')
