@@ -16,14 +16,14 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "COM4"
 HTTP_PORT = 5000
 
 # Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
 # Amount of panels.
-num_panels = 4
+num_panels = 20
 
 # Initialize panel ids.
 sensor_numbers = range(num_panels)
@@ -205,7 +205,7 @@ class SerialHandler(object):
         if cur != act:
           self.profile_handler.UpdateThresholds(i, act)
 
-    while not thread_stop_event.isSet():
+    while not thread_stop_event.is_set():
       if NO_SERIAL:
         offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
         self.no_serial_values = [
@@ -249,7 +249,7 @@ class SerialHandler(object):
           self.Open()
 
   def Write(self):
-    while not thread_stop_event.isSet():
+    while not thread_stop_event.is_set():
       try:
         command = self.write_queue.get(timeout=1)
       except queue.Empty:

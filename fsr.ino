@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <CD74HC4067.h>
 
 #if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
     !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
@@ -293,8 +294,8 @@ class SensorState {
 // Class containing all relevant information per sensor.
 class Sensor {
  public:
-  Sensor(uint8_t pin_value, SensorState* sensor_state = nullptr)
-      : initialized_(false), pin_value_(pin_value),
+  Sensor(uint8_t pin_value, SensorState* sensor_state = nullptr, CD74HC4067* mux = nullptr, uint8_t channel_value = 0)
+      : initialized_(false), pin_value_(pin_value), mux_(mux), channel_value_(channel_value),
         user_threshold_(kDefaultThreshold),
         #if defined(CAN_AVERAGE)
           moving_average_(kWindowSize),
@@ -343,6 +344,9 @@ class Sensor {
       return;
     }
 
+    if (mux_ != nullptr) {
+      mux_->channel(channel_value_);
+    }
     int16_t sensor_value = analogRead(pin_value_);
 
     #if defined(CAN_AVERAGE)
@@ -393,6 +397,11 @@ class Sensor {
   // The pin on the Teensy/Arduino corresponding to this sensor.
   uint8_t pin_value_;
 
+  // The multiplexer instance
+  CD74HC4067* mux_;
+  // The channel on the multiplexer corresponding to this sensor.
+  uint8_t channel_value_;
+
   // The user defined threshold value to activate/deactivate this sensor at.
   int16_t user_threshold_;
   
@@ -436,13 +445,51 @@ class Sensor {
 //   Sensor(A4),
 // };
 
+//Sensor kSensors[] = {
+//  Sensor(A0),
+//  Sensor(A1),
+//  Sensor(A2),
+//  Sensor(A3),
+//};
+//const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
+
+CD74HC4067 mux1 = CD74HC4067(2,3,4,5);
+CD74HC4067 mux2 = CD74HC4067(6,7,8,9);
+
+SensorState panel_1;
+SensorState panel_3;
+SensorState panel_5;
+SensorState panel_7;
+SensorState panel_9;
+
 Sensor kSensors[] = {
-  Sensor(A0),
-  Sensor(A1),
-  Sensor(A2),
-  Sensor(A3),
+  Sensor(A10, &panel_1, &mux1, 1),
+  Sensor(A10, &panel_1, &mux1, 2),
+  Sensor(A10, &panel_1, &mux1, 3),
+  Sensor(A10, &panel_1, &mux1, 4),
+  
+  Sensor(A10, &panel_3, &mux1, 8),
+  Sensor(A10, &panel_3, &mux1, 9),
+  Sensor(A10, &panel_3, &mux1, 10),
+  Sensor(A10, &panel_3, &mux1, 11),
+
+  Sensor(A10, &panel_5, &mux1, 12),
+  Sensor(A10, &panel_5, &mux1, 13),
+  Sensor(A10, &panel_5, &mux1, 14),
+  Sensor(A10, &panel_5, &mux1, 15),
+  
+  Sensor(A11, &panel_7, &mux2, 1),
+  Sensor(A11, &panel_7, &mux2, 2),
+  Sensor(A11, &panel_7, &mux2, 3),
+  Sensor(A11, &panel_7, &mux2, 4),
+  
+  Sensor(A11, &panel_9, &mux2, 8),
+  Sensor(A11, &panel_9, &mux2, 9),
+  Sensor(A11, &panel_9, &mux2, 10),
+  Sensor(A11, &panel_9, &mux2, 11)
 };
-const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
+
+const int16_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
 /*===========================================================================*/
 
@@ -537,6 +584,12 @@ class SerialProcessor {
     kSensors[sensor_index].UpdateThreshold(
         strtoul(buffer_ + sensor_digits, nullptr, 10));
     PrintThresholds();
+  }
+
+  void UpdateOffsets() {
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      kSensors[i].UpdateOffset();
+    }
   }
 
   void PrintValues() {
