@@ -50,26 +50,23 @@ class ProfileHandler(object):
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
     self.profiles[''] = [0] * num_panels
-    self.loaded = False
 
-  def MaybeLoad(self):
-    if not self.loaded:
-      num_profiles = 0
-      if os.path.exists(self.filename):
-        with open(self.filename, 'r') as f:
-          for line in f:
-            parts = line.split()
-            if len(parts) == (num_panels+1):
-              self.profiles[parts[0]] = [int(x) for x in parts[1:]]
-              num_profiles += 1
-              # Change to the first profile found.
-              # This will also emit the thresholds.
-              if num_profiles == 1:
-                self.ChangeProfile(parts[0])
-      else:
-        open(self.filename, 'w').close()
-      self.loaded = True
-      print('Found Profiles: ' + str(list(self.profiles.keys())))
+  def Load(self):
+    num_profiles = 0
+    if os.path.exists(self.filename):
+      with open(self.filename, 'r') as f:
+        for line in f:
+          parts = line.split()
+          if len(parts) == (num_panels+1):
+            self.profiles[parts[0]] = [int(x) for x in parts[1:]]
+            num_profiles += 1
+            # Change to the first profile found.
+            # This will also emit the thresholds.
+            if num_profiles == 1:
+              self.ChangeProfile(parts[0])
+    else:
+      open(self.filename, 'w').close()
+    print('Found Profiles: ' + str(list(self.profiles.keys())))
 
   def GetCurThresholds(self):
     if self.cur_profile in self.profiles:
@@ -133,13 +130,42 @@ class ProfileHandler(object):
   def GetCurrentProfile(self):
     return self.cur_profile
 
+profile_handler = ProfileHandler()
+write_queue = queue.Queue(10)
 
-class SerialHandler(object):
+def run_fake_serial(write_queue, profile_handler):
+  # Use this to store the values when emulating serial so the graph isn't too
+  # jumpy. Only used when NO_SERIAL is true.
+  no_serial_values = [0] * num_panels
+
+  while not thread_stop_event.is_set():
+    # Check for command from write_queue
+    try:
+      # The timeout here controls the frequency of checking sensor values.
+      command = write_queue.get(timeout=0.01)
+    except queue.Empty:
+      # If there is no other pending command, check sensor values.
+      command = 'v\n'
+    if command == 'v\n':
+      offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
+      no_serial_values = [
+        max(0, min(no_serial_values[i] + offsets[i], 1023))
+        for i in range(num_panels)
+      ]
+      broadcast(['values', {'values': no_serial_values}])
+    elif command == 't\n':
+      if command[0] == 't':
+        broadcast(['thresholds',
+          {'thresholds': profile_handler.GetCurThresholds()}])
+        print('Thresholds are: ' +
+          str(profile_handler.GetCurThresholds()))
+
+
+def run_serial(port, timeout, write_queue, profile_handler):
   """
-  A class to handle all the serial interactions.
+  A function to handle all the serial interactions. Run in a separate thread.
 
-  Attributes:
-    ser: Serial, the serial object opened by this class.
+  Parameters:
     port: string, the path/name of the serial object to open.
     timeout: int, the time in seconds indicating the timeout for serial
       operations.
@@ -147,147 +173,81 @@ class SerialHandler(object):
     profile_handler: ProfileHandler, the global profile_handler used to update
       the thresholds
   """
-  def __init__(self, profile_handler, port='', timeout=1):
-    self.ser = None
-    self.port = port
-    self.timeout = timeout
-    self.write_queue = queue.Queue(10)
-    self.profile_handler = profile_handler
+  ser = None
 
-    # Use this to store the values when emulating serial so the graph isn't too
-    # jumpy. Only used when NO_SERIAL is true.
-    self.no_serial_values = [0] * num_panels
+  def ProcessValues(values):
+    # Fix our sensor ordering.
+    actual = []
+    for i in range(num_panels):
+      actual.append(values[sensor_numbers[i]])
+    broadcast(['values', {'values': actual}])
 
-  def ChangePort(self, port):
-    if self.ser:
-      self.ser.close()
-      self.ser = None
-    self.port = port
-    self.Open()
+  def ProcessThresholds(values):
+    cur_thresholds = profile_handler.GetCurThresholds()
+    # Fix our sensor ordering.
+    actual = []
+    for i in range(num_panels):
+      actual.append(values[sensor_numbers[i]])
+    for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
+      if cur != act:
+        profile_handler.UpdateThresholds(i, act)
 
-  def Open(self):
-    if not self.port:
-      return
-
-    if self.ser:
-      self.ser.close()
-      self.ser = None
-
-    try:
-      self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
-      if self.ser:
-        # Apply currently loaded thresholds when the microcontroller connects.
-        for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
-          self.write_queue.put(threshold_cmd, block=False)
-    except queue.Full as e:
-      logger.error('Could not set thresholds. Queue full.')
-    except serial.SerialException as e:
-      self.ser = None
-      logger.exception('Error opening serial: %s', e)
-
-  def Read(self):
-    def ProcessValues(values):
-      # Fix our sensor ordering.
-      actual = []
-      for i in range(num_panels):
-        actual.append(values[sensor_numbers[i]])
-      broadcast(['values', {'values': actual}])
-      time.sleep(0.01)
-
-    def ProcessThresholds(values):
-      cur_thresholds = self.profile_handler.GetCurThresholds()
-      # Fix our sensor ordering.
-      actual = []
-      for i in range(num_panels):
-        actual.append(values[sensor_numbers[i]])
-      for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
-        if cur != act:
-          self.profile_handler.UpdateThresholds(i, act)
-
-    while not thread_stop_event.isSet():
-      if NO_SERIAL:
-        offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
-        self.no_serial_values = [
-          max(0, min(self.no_serial_values[i] + offsets[i], 1023))
-          for i in range(num_panels)
-        ]
-        broadcast(['values', {'values': self.no_serial_values}])
-        time.sleep(0.01)
-      else:
-        if not self.ser:
-          self.Open()
-          # Still not open, retry loop.
-          if not self.ser:
-            time.sleep(1)
-            continue
-
-        try:
-          # Send the command to fetch the values.
-          self.write_queue.put('v\n', block=False)
-
-          # Wait until we actually get the values.
-          # This will block the thread until it gets a newline
-          line = self.ser.readline().decode('ascii').strip()
-
-          # All commands are of the form:
-          #   cmd num1 num2 num3 num4
-          parts = line.split()
-          if len(parts) != num_panels+1:
-            continue
-          cmd = parts[0]
-          values = [int(x) for x in parts[1:]]
-
-          if cmd == 'v':
-            ProcessValues(values)
-          elif cmd == 't':
-            ProcessThresholds(values)
-        except queue.Full as e:
-          logger.error('Could not fetch new values. Queue full.')
-        except serial.SerialException as e:
-          logger.error('Error reading data: ', e)
-          self.Open()
-
-  def Write(self):
-    while not thread_stop_event.isSet():
+  while not thread_stop_event.is_set():
+    # Try to open the serial port if needed
+    if not ser:
       try:
-        command = self.write_queue.get(timeout=1)
-      except queue.Empty:
+        ser = serial.Serial(port, 115200, timeout=timeout)
+      except serial.SerialException as e:
+        ser = None
+        logger.exception('Error opening serial: %s', e)
+        # Delay and retry
+        time.sleep(1)
         continue
-      if NO_SERIAL:
-        if command[0] == 't':
-          broadcast(['thresholds',
-            {'thresholds': self.profile_handler.GetCurThresholds()}])
-          print('Thresholds are: ' +
-            str(self.profile_handler.GetCurThresholds()))
-        else:
-          sensor, threshold = int(command[0]), int(command[1:-1])
-          for i, index in enumerate(sensor_numbers):
-            if index == sensor:
-              self.profile_handler.UpdateThresholds(i, threshold)
-      else:
-        if not self.ser:
-          # Just wait until the reader opens the serial port.
-          time.sleep(1)
-          continue
+    # Check for command from write_queue
+    try:
+      # The timeout here controls the frequency of checking sensor values.
+      command = write_queue.get(timeout=0.01)
+    except queue.Empty:
+      # If there is no other pending command, check sensor values.
+      command = 'v\n'
+    try:
+      ser.write(command.encode())
+    except serial.SerialException as e:
+      logger.error('Error writing data: ', e)
+      # Maybe we need to surface the error higher up?
+      continue
+    try:
+      # Wait for a response.
+      # This will block the thread until it gets a newline or until the serial timeout.
+      line = ser.readline().decode('ascii')
 
-        try:
-          self.ser.write(command.encode())
-        except serial.SerialException as e:
-          logger.error('Error writing data: ', e)
-          # Emit current thresholds since we couldn't update the values.
-          broadcast(['thresholds',
-            {'thresholds': self.profile_handler.GetCurThresholds()}])
+      if not line.endswith("\n"):
+        logger.error('Timeout reading response to command.', command, line)
+        continue
 
+      line = line.strip()
 
-profile_handler = ProfileHandler()
-serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
+      # All commands are of the form:
+      #   cmd num1 num2 num3 num4
+      parts = line.split()
+      if len(parts) != num_panels+1:
+        continue
+      cmd = parts[0]
+      values = [int(x) for x in parts[1:]]
+
+      if cmd == 'v':
+        ProcessValues(values)
+      elif cmd == 't':
+        ProcessThresholds(values)
+    except serial.SerialException as e:
+      logger.error('Error reading data: ', e)
+
 
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
     threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-    serial_handler.write_queue.put(threshold_cmd, block=False)
+    write_queue.put(threshold_cmd, block=False)
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
 
@@ -342,18 +302,10 @@ async def get_ws(request):
 
   request.app['websockets'].append(ws)
   print('Client connected')
-  profile_handler.MaybeLoad()
 
-  # The above does emit if there are differences, so have an extra for the
-  # case there are no differences.
-  await ws.send_json([
-    'thresholds',
-    {'thresholds': profile_handler.GetCurThresholds()},
-  ])
-
-  # Potentially fetch any threshold values from the microcontroller that
-  # may be out of sync with our profiles.
-  serial_handler.write_queue.put('t\n', block=False)
+  # # Potentially fetch any threshold values from the microcontroller that
+  # # may be out of sync with our profiles.
+  # serial_handler.write_queue.put('t\n', block=False)
 
   queue = asyncio.Queue(maxsize=100)
   with out_queues_lock:
@@ -422,11 +374,13 @@ async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
 async def on_startup(app):
-  read_thread = threading.Thread(target=serial_handler.Read)
-  read_thread.start()
+  profile_handler.Load()
 
-  write_thread = threading.Thread(target=serial_handler.Write)
-  write_thread.start()
+  if NO_SERIAL:
+    serial_thread = threading.Thread(target=run_fake_serial, kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
+  else:
+    serial_thread = threading.Thread(target=run_serial, kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'profile_handler': profile_handler})
+  serial_thread.start()
 
 async def on_shutdown(app):
   for ws in app['websockets']:
