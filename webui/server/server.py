@@ -313,7 +313,7 @@ async def get_ws(request):
           await ws.send_json(msg)
 
           queue_task = asyncio.create_task(queue.get())
-        elif task == receive_task:
+        elif task == receive_task and not ws.closed:
           msg = await receive_task
 
           if msg.type == WSMsgType.TEXT:
@@ -343,11 +343,9 @@ async def get_ws(request):
     request.app['websockets'].remove(ws)
     with out_queues_lock:
       out_queues.remove(queue)
-
-  queue_task.cancel()
-  receive_task.cancel()
-
-  print('Client disconnected')
+      queue_task.cancel()
+      receive_task.cancel()
+      print('Client disconnected')
 
 
 build_dir = os.path.abspath(
