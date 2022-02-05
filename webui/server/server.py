@@ -36,7 +36,7 @@ NO_SERIAL = False
 out_queues = set()
 
 # Used to coordinate updates to out_queues.
-out_queues_lock = threading.Lock()
+out_queues_lock = asyncio.Lock()
 
 # Allow serial thread to schedule coroutines to run on the main thread.
 main_thread_loop = asyncio.get_event_loop()
@@ -258,12 +258,15 @@ def make_get_defaults(profile_handler):
   return get_defaults
 
 def broadcast(msg):
-  with out_queues_lock:
-    for q in out_queues:
-      try:
-        main_thread_loop.call_soon_threadsafe(q.put_nowait, msg)
-      except asyncio.queues.QueueFull:
-        pass
+  async def put_all():
+    async with out_queues_lock:
+      for q in out_queues:
+        try:
+          q.put_nowait(msg)
+        except asyncio.queues.QueueFull:
+          print('queue full, dropping message' + msg)
+          pass
+  asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
 
 def make_get_ws(profile_handler, write_queue):
   def update_threshold(values, index):
@@ -308,7 +311,7 @@ def make_get_ws(profile_handler, write_queue):
     # serial_handler.write_queue.put('t\n', block=False)
 
     queue = asyncio.Queue(maxsize=100)
-    with out_queues_lock:
+    async with out_queues_lock:
       out_queues.add(queue)
 
     try:
@@ -356,11 +359,11 @@ def make_get_ws(profile_handler, write_queue):
       pass
     finally:
       request.app['websockets'].remove(ws)
-      with out_queues_lock:
+      async with out_queues_lock:
         out_queues.remove(queue)
-        queue_task.cancel()
-        receive_task.cancel()
-        print('Client disconnected')
+      queue_task.cancel()
+      receive_task.cancel()
+      print('Client disconnected')
   
   return get_ws
 
