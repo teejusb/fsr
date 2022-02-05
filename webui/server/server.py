@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import asyncio
+import concurrent.futures
 import logging
 import os
 import queue
@@ -261,12 +262,20 @@ def broadcast(msg):
   async def put_all():
     async with out_queues_lock:
       for q in out_queues:
+        await q.put(msg)
+      for q in out_queues:
         try:
-          q.put_nowait(msg)
-        except asyncio.queues.QueueFull:
-          print('queue full, dropping message' + msg)
-          pass
-  asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
+          await asyncio.wait_for(q.join(), timeout=0.1)
+        except asyncio.TimeoutError:
+          print('asyncio queue join timeout')
+  fut = asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
+  if threading.current_thread().name == 'serial':
+    # If serial thread, block and wait for broadcast
+    try:
+      fut.result()
+    except concurrent.futures.CancelledError:
+      pass
+
 
 def make_get_ws(profile_handler, write_queue):
   def update_threshold(values, index):
@@ -329,6 +338,7 @@ def make_get_ws(profile_handler, write_queue):
           if task == queue_task:
             msg = await queue_task
             await ws.send_json(msg)
+            queue.task_done()
 
             queue_task = asyncio.create_task(queue.get())
           elif task == receive_task and not ws.closed:
@@ -403,9 +413,9 @@ def main():
   app.on_shutdown.append(on_shutdown)
 
   if NO_SERIAL:
-    serial_thread = threading.Thread(target=run_fake_serial, kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
+    serial_thread = threading.Thread(target=run_fake_serial, name='serial', kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
   else:
-    serial_thread = threading.Thread(target=run_serial, kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'profile_handler': profile_handler})
+    serial_thread = threading.Thread(target=run_serial, name='serial', kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'profile_handler': profile_handler})
   serial_thread.start()
 
   hostname = socket.gethostname()
