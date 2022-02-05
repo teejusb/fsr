@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
-# Event to tell the reader and writer threads to exit.
+# Event to tell the serial thread to exit.
 thread_stop_event = threading.Event()
 
 # Amount of panels.
@@ -31,6 +31,15 @@ sensor_numbers = range(num_panels)
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
+
+# One asyncio queue per open websocket, for broadcasting messages to all clients
+out_queues = set()
+
+# Used to coordinate updates to out_queues.
+out_queues_lock = threading.Lock()
+
+# Allow serial thread to schedule coroutines to run on the main thread.
+main_thread_loop = asyncio.get_event_loop()
 
 
 class ProfileHandler(object):
@@ -239,44 +248,14 @@ def run_serial(port, timeout, write_queue, profile_handler):
     except serial.SerialException as e:
       logger.error('Error reading data: ', e)
 
-
-def update_threshold(values, index):
-  try:
-    # Let the writer thread handle updating thresholds.
-    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-    write_queue.put(threshold_cmd, block=False)
-  except queue.Full:
-    logger.error('Could not update thresholds. Queue full.')
-
-
-def add_profile(profile_name, thresholds):
-  profile_handler.AddProfile(profile_name, thresholds)
-  # When we add a profile, we are using the currently loaded thresholds so we
-  # don't need to explicitly apply anything.
-
-
-def remove_profile(profile_name):
-  profile_handler.RemoveProfile(profile_name)
-  # Need to apply the thresholds of the profile we've fallen back to.
-  thresholds = profile_handler.GetCurThresholds()
-  for i in range(len(thresholds)):
-    update_threshold(thresholds, i)
-
-
-def change_profile(profile_name):
-  profile_handler.ChangeProfile(profile_name)
-  # Need to apply the thresholds of the profile we've changed to.
-  thresholds = profile_handler.GetCurThresholds()
-  for i in range(len(thresholds)):
-    update_threshold(thresholds, i)
-
-
-async def get_defaults(request):
-  return json_response({
-    'profiles': profile_handler.GetProfileNames(),
-    'cur_profile': profile_handler.GetCurrentProfile(),
-    'thresholds': profile_handler.GetCurThresholds()
-  })
+def make_get_defaults(profile_handler):
+  async def get_defaults(request):
+    return json_response({
+      'profiles': profile_handler.GetProfileNames(),
+      'cur_profile': profile_handler.GetCurrentProfile(),
+      'thresholds': profile_handler.GetCurThresholds()
+    })
+  return get_defaults
 
 def broadcast(msg):
   with out_queues_lock:
@@ -286,72 +265,104 @@ def broadcast(msg):
       except asyncio.queues.QueueFull:
         pass
 
-async def get_ws(request):
-  ws = web.WebSocketResponse()
-  await ws.prepare(request)
+def make_get_ws(profile_handler, write_queue):
+  def update_threshold(values, index):
+    try:
+      # Let the writer thread handle updating thresholds.
+      threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+      write_queue.put(threshold_cmd, block=False)
+    except queue.Full:
+      logger.error('Could not update thresholds. Queue full.')
 
-  request.app['websockets'].append(ws)
-  print('Client connected')
 
-  # # Potentially fetch any threshold values from the microcontroller that
-  # # may be out of sync with our profiles.
-  # serial_handler.write_queue.put('t\n', block=False)
+  def add_profile(profile_name, thresholds):
+    profile_handler.AddProfile(profile_name, thresholds)
+    # When we add a profile, we are using the currently loaded thresholds so we
+    # don't need to explicitly apply anything.
 
-  queue = asyncio.Queue(maxsize=100)
-  with out_queues_lock:
-    out_queues.add(queue)
 
-  try:
-    queue_task = asyncio.create_task(queue.get())
-    receive_task = asyncio.create_task(ws.receive())
-    connected = True
+  def remove_profile(profile_name):
+    profile_handler.RemoveProfile(profile_name)
+    # Need to apply the thresholds of the profile we've fallen back to.
+    thresholds = profile_handler.GetCurThresholds()
+    for i in range(len(thresholds)):
+      update_threshold(thresholds, i)
 
-    while connected:
-      done, pending = await asyncio.wait([
-        queue_task,
-        receive_task,
-      ], return_when=asyncio.FIRST_COMPLETED)
 
-      for task in done:
-        if task == queue_task:
-          msg = await queue_task
-          await ws.send_json(msg)
+  def change_profile(profile_name):
+    profile_handler.ChangeProfile(profile_name)
+    # Need to apply the thresholds of the profile we've changed to.
+    thresholds = profile_handler.GetCurThresholds()
+    for i in range(len(thresholds)):
+      update_threshold(thresholds, i)
 
-          queue_task = asyncio.create_task(queue.get())
-        elif task == receive_task and not ws.closed:
-          msg = await receive_task
+  async def get_ws(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
 
-          if msg.type == WSMsgType.TEXT:
-            data = msg.json()
-            action = data[0]
+    request.app['websockets'].append(ws)
+    print('Client connected')
 
-            if action == 'update_threshold':
-              values, index = data[1:]
-              update_threshold(values, index)
-            elif action == 'add_profile':
-              profile_name, thresholds = data[1:]
-              add_profile(profile_name, thresholds)
-            elif action == 'remove_profile':
-              profile_name, = data[1:]
-              remove_profile(profile_name)
-            elif action == 'change_profile':
-              profile_name, = data[1:]
-              change_profile(profile_name)
-          elif msg.type == WSMsgType.CLOSE:
-            connected = False
-            continue
+    # # Potentially fetch any threshold values from the microcontroller that
+    # # may be out of sync with our profiles.
+    # serial_handler.write_queue.put('t\n', block=False)
 
-          receive_task = asyncio.create_task(ws.receive())
-  except ConnectionResetError:
-    pass
-  finally:
-    request.app['websockets'].remove(ws)
+    queue = asyncio.Queue(maxsize=100)
     with out_queues_lock:
-      out_queues.remove(queue)
-      queue_task.cancel()
-      receive_task.cancel()
-      print('Client disconnected')
+      out_queues.add(queue)
 
+    try:
+      queue_task = asyncio.create_task(queue.get())
+      receive_task = asyncio.create_task(ws.receive())
+      connected = True
+
+      while connected:
+        done, pending = await asyncio.wait([
+          queue_task,
+          receive_task,
+        ], return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+          if task == queue_task:
+            msg = await queue_task
+            await ws.send_json(msg)
+
+            queue_task = asyncio.create_task(queue.get())
+          elif task == receive_task and not ws.closed:
+            msg = await receive_task
+
+            if msg.type == WSMsgType.TEXT:
+              data = msg.json()
+              action = data[0]
+
+              if action == 'update_threshold':
+                values, index = data[1:]
+                update_threshold(values, index)
+              elif action == 'add_profile':
+                profile_name, thresholds = data[1:]
+                add_profile(profile_name, thresholds)
+              elif action == 'remove_profile':
+                profile_name, = data[1:]
+                remove_profile(profile_name)
+              elif action == 'change_profile':
+                profile_name, = data[1:]
+                change_profile(profile_name)
+            elif msg.type == WSMsgType.CLOSE:
+              connected = False
+              continue
+
+            receive_task = asyncio.create_task(ws.receive())
+    except ConnectionResetError:
+      pass
+    finally:
+      request.app['websockets'].remove(ws)
+      with out_queues_lock:
+        out_queues.remove(queue)
+        queue_task.cancel()
+        receive_task.cancel()
+        print('Client disconnected')
+  
+  return get_ws
 
 build_dir = os.path.abspath(
   os.path.join(os.path.dirname(__file__), '..', 'build')
@@ -366,31 +377,27 @@ async def on_shutdown(app):
     await ws.close(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
   thread_stop_event.set()
 
-app = web.Application()
-
-# List of open websockets, to close when the app shuts down.
-app['websockets'] = []
-
-app.add_routes([
-  web.get('/defaults', get_defaults),
-  web.get('/ws', get_ws),
-])
-if not NO_SERIAL:
-  app.add_routes([
-    web.get('/', get_index),
-    web.get('/plot', get_index),
-    web.static('/', build_dir),
-  ])
-app.on_shutdown.append(on_shutdown)
-
-if __name__ == '__main__':
-  out_queues = set()
-  out_queues_lock = threading.Lock()
-  main_thread_loop = asyncio.get_event_loop()
-
+def main():
   profile_handler = ProfileHandler()
   profile_handler.Load()
   write_queue = queue.Queue(10)
+
+  app = web.Application()
+
+  # List of open websockets, to close when the app shuts down.
+  app['websockets'] = []
+
+  app.add_routes([
+    web.get('/defaults', make_get_defaults(profile_handler)),
+    web.get('/ws', make_get_ws(profile_handler, write_queue)),
+  ])
+  if not NO_SERIAL:
+    app.add_routes([
+      web.get('/', get_index),
+      web.get('/plot', get_index),
+      web.static('/', build_dir),
+    ])
+  app.on_shutdown.append(on_shutdown)
 
   if NO_SERIAL:
     serial_thread = threading.Thread(target=run_fake_serial, kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
@@ -403,3 +410,6 @@ if __name__ == '__main__':
   print(' * WebUI can be found at: http://' + ip_address + ':' + str(HTTP_PORT))
 
   web.run_app(app, port=HTTP_PORT)
+
+if __name__ == '__main__':
+  main()
