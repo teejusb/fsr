@@ -43,13 +43,11 @@ class ProfileHandler(object):
     cur_profile: string, the name of the current active profile.
     loaded: bool, whether or not the backend has already loaded the
       profile data file or not.
-    broadcast: function to send commands
   """
-  def __init__(self, broadcast, filename='profiles.txt'):
+  def __init__(self, filename='profiles.txt'):
     self.filename = filename
     self.profiles = OrderedDict()
     self.cur_profile = ''
-    self.broadcast = broadcast
     # Have a default no-name profile we can use in case there are no profiles.
     self.profiles[''] = [0] * num_panels
 
@@ -86,14 +84,14 @@ class ProfileHandler(object):
         for name, thresholds in self.profiles.items():
           if name:
             f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-      self.broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
+      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
       print('Thresholds are: ' + str(self.GetCurThresholds()))
 
   def ChangeProfile(self, profile_name):
     if profile_name in self.profiles:
       self.cur_profile = profile_name
-      self.broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
-      self.broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
+      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
+      broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
       print('Changed to profile "{}" with thresholds: {}'.format(
         self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
@@ -110,7 +108,7 @@ class ProfileHandler(object):
       for name, thresholds in self.profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-    self.broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
+    broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
     print('Added profile "{}" with thresholds: {}'.format(
       self.GetCurrentProfile(), str(self.GetCurThresholds())))
 
@@ -123,9 +121,9 @@ class ProfileHandler(object):
         for name, thresholds in self.profiles.items():
           if name:
             f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-      self.broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
-      self.broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
-      self.broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
+      broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
+      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
+      broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
       print('Removed profile "{}". Current thresholds are: {}'.format(
         profile_name, str(self.GetCurThresholds())))
 
@@ -160,7 +158,7 @@ def run_fake_serial(write_queue, broadcast, profile_handler):
           str(profile_handler.GetCurThresholds()))
 
 
-def run_serial(port, timeout, write_queue, broadcast, profile_handler):
+def run_serial(port, timeout, write_queue, profile_handler):
   """
   A function to handle all the serial interactions. Run in a separate thread.
 
@@ -169,7 +167,6 @@ def run_serial(port, timeout, write_queue, broadcast, profile_handler):
     timeout: int, the time in seconds indicating the timeout for serial
       operations.
     write_queue: Queue, a queue object read by the writer thread
-    broadcast: function to send commands
     profile_handler: ProfileHandler, the global profile_handler used to update
       the thresholds
   """
@@ -281,6 +278,14 @@ async def get_defaults(request):
     'thresholds': profile_handler.GetCurThresholds()
   })
 
+def broadcast(msg):
+  with out_queues_lock:
+    for q in out_queues:
+      try:
+        main_thread_loop.call_soon_threadsafe(q.put_nowait, msg)
+      except asyncio.queues.QueueFull:
+        pass
+
 async def get_ws(request):
   ws = web.WebSocketResponse()
   await ws.prepare(request)
@@ -383,22 +388,14 @@ if __name__ == '__main__':
   out_queues_lock = threading.Lock()
   main_thread_loop = asyncio.get_event_loop()
 
-  def broadcastXX(msg):
-    with out_queues_lock:
-      for q in out_queues:
-        try:
-          main_thread_loop.call_soon_threadsafe(q.put_nowait, msg)
-        except asyncio.queues.QueueFull:
-          pass
-
-  profile_handler = ProfileHandler(broadcastXX)
+  profile_handler = ProfileHandler()
   profile_handler.Load()
   write_queue = queue.Queue(10)
 
   if NO_SERIAL:
-    serial_thread = threading.Thread(target=run_fake_serial, kwargs={'write_queue': write_queue, 'broadcast': broadcastXX, 'profile_handler': profile_handler})
+    serial_thread = threading.Thread(target=run_fake_serial, kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
   else:
-    serial_thread = threading.Thread(target=run_serial, kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'broadcast': broadcastXX, 'profile_handler': profile_handler})
+    serial_thread = threading.Thread(target=run_serial, kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'profile_handler': profile_handler})
   serial_thread.start()
 
   hostname = socket.gethostname()
