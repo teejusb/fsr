@@ -362,32 +362,47 @@ function ValueMonitor(props) {
   }, [EmitValue, curThresholds, curValues, index, webUIDataRef]);
 
   return(
-    <Col style={{height: '75vh', paddingTop: '1vh'}}>
-      <Button variant="light" size="sm" onClick={Decrement}><b>-</b></Button>
-      <span> </span>
-      <Button variant="light" size="sm" onClick={Increment}><b>+</b></Button>
-      <br />
-      <Form.Label ref={thresholdLabelRef}>0</Form.Label>
-      <br />
-      <Form.Label ref={valueLabelRef}>0</Form.Label>
+    <Col className="ValueMonitor-col">
+      <div className="ValueMonitor-buttons">
+        <Button variant="light" size="sm" onClick={Decrement}><b>-</b></Button>
+        <span> </span>
+        <Button variant="light" size="sm" onClick={Increment}><b>+</b></Button>
+      </div>
+      <Form.Label className="ValueMonitor-label" ref={thresholdLabelRef}>0</Form.Label>
+      <Form.Label className="ValueMonitor-label" ref={valueLabelRef}>0</Form.Label>
       <canvas
+        className="ValueMonitor-canvas"
         ref={canvasRef}
-        style={{border: '1px solid white', width: '100%', height: '100%', touchAction: "none"}} />
+      />
     </Col>
   );
 }
 
 function ValueMonitors(props) {
-  const { emit, numSensors, webUIDataRef} = props;
+  const { numSensors } = props;
   return (
     <header className="App-header">
       <Container fluid style={{border: '1px solid white', height: '100vh'}}>
-        <Row>
-          {[...Array(numSensors).keys()].map(index => (
-          	<ValueMonitor emit={emit} index={index} key={index} webUIDataRef={webUIDataRef} />)
-          )}
+        <Row className="ValueMonitor-row">
+          {props.children}
         </Row>
       </Container>
+      <style>
+        {`
+        .ValueMonitor-col {
+          width: ${100 / numSensors}%;
+        }
+        /* 15 + 15 is left and right padding (from bootstrap col class). */
+        /* 75 is the minimum desired width of the canvas. */
+        /* If there is not enough room for all columns and padding to fit, reduce padding. */
+        @media (max-width: ${numSensors * (15 + 15 + 75)}px) {
+          .ValueMonitor-col {
+            padding-left: 1px;
+            padding-right: 1px;
+          }
+        }
+        `}
+      </style>
     </header>
   );
 }
@@ -648,7 +663,11 @@ function FSRWebUI(props) {
         </Navbar>
         <Switch>
           <Route exact path="/">
-            <ValueMonitors emit={emit} numSensors={numSensors} webUIDataRef={webUIDataRef} />
+            <ValueMonitors numSensors={numSensors}>
+              {[...Array(numSensors).keys()].map(index => (
+                <ValueMonitor emit={emit} index={index} key={index} webUIDataRef={webUIDataRef} />)
+              )}
+            </ValueMonitors>
           </Route>
           <Route path="/plot">
             <Plot webUIDataRef={webUIDataRef} />
