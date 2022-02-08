@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 import asyncio
-import concurrent.futures
 import logging
 import os
-import queue
 import socket
 import threading
-import time
 from collections import OrderedDict
 from random import normalvariate
 
@@ -140,7 +137,7 @@ class ProfileHandler(object):
   def GetCurrentProfile(self):
     return self.cur_profile
 
-def run_fake_serial(write_queue, broadcast, profile_handler):
+async def run_fake_serial(write_queue, profile_handler):
   # Use this to store the values when emulating serial so the graph isn't too
   # jumpy. Only used when NO_SERIAL is true.
   no_serial_values = [0] * num_panels
@@ -149,8 +146,8 @@ def run_fake_serial(write_queue, broadcast, profile_handler):
     # Check for command from write_queue
     try:
       # The timeout here controls the frequency of checking sensor values.
-      command = write_queue.get(timeout=0.01)
-    except queue.Empty:
+      command = await asyncio.wait_for(write_queue.get(), timeout=0.01)
+    except asyncio.TimeoutError:
       # If there is no other pending command, check sensor values.
       command = 'v\n'
     if command == 'v\n':
@@ -168,15 +165,15 @@ def run_fake_serial(write_queue, broadcast, profile_handler):
           str(profile_handler.GetCurThresholds()))
 
 
-def run_serial(port, timeout, write_queue, profile_handler):
+async def run_serial(port, timeout, write_queue, profile_handler):
   """
-  A function to handle all the serial interactions. Run in a separate thread.
+  A function to handle all the serial interactions. Run in a separate Task.
 
   Parameters:
     port: string, the path/name of the serial object to open.
     timeout: int, the time in seconds indicating the timeout for serial
       operations.
-    write_queue: Queue, a queue object read by the writer thread
+    write_queue: asyncio queue of serial writes
     profile_handler: ProfileHandler, the global profile_handler used to update
       the thresholds
   """
@@ -203,22 +200,26 @@ def run_serial(port, timeout, write_queue, profile_handler):
     # Try to open the serial port if needed
     if not ser:
       try:
-        ser = serial.Serial(port, 115200, timeout=timeout)
+        def open_serial():
+          return serial.Serial(port, 115200, timeout=timeout)
+        ser = await asyncio.to_thread(open_serial)
       except serial.SerialException as e:
         ser = None
         logger.exception('Error opening serial: %s', e)
         # Delay and retry
-        time.sleep(1)
+        await asyncio.sleep(1)
         continue
     # Check for command from write_queue
     try:
       # The timeout here controls the frequency of checking sensor values.
-      command = write_queue.get(timeout=0.01)
-    except queue.Empty:
+      command = await asyncio.wait_for(write_queue.get(), timeout=0.01)
+    except asyncio.TimeoutError:
       # If there is no other pending command, check sensor values.
       command = 'v\n'
     try:
-      ser.write(command.encode())
+      def write_command():
+        ser.write(command.encode())
+      await asyncio.to_thread(write_command)
     except serial.SerialException as e:
       logger.error('Error writing data: ', e)
       # Maybe we need to surface the error higher up?
@@ -226,7 +227,9 @@ def run_serial(port, timeout, write_queue, profile_handler):
     try:
       # Wait for a response.
       # This will block the thread until it gets a newline or until the serial timeout.
-      line = ser.readline().decode('ascii')
+      def read_line():
+        return ser.readline().decode('ascii')
+      line = await asyncio.to_thread(read_line)
 
       if not line.endswith("\n"):
         logger.error('Timeout reading response to command.', command, line)
@@ -263,18 +266,19 @@ def broadcast(msg):
     async with out_queues_lock:
       for q in out_queues:
         await q.put(msg)
-      for q in out_queues:
-        try:
-          await asyncio.wait_for(q.join(), timeout=0.1)
-        except asyncio.TimeoutError:
-          print('asyncio queue join timeout')
-  fut = asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
-  if threading.current_thread().name == 'serial':
-    # If serial thread, block and wait for broadcast
-    try:
-      fut.result()
-    except concurrent.futures.CancelledError:
-      pass
+      # for q in out_queues:
+      #   try:
+      #     await asyncio.wait_for(q.join(), timeout=0.1)
+      #   except asyncio.TimeoutError:
+      #     print('asyncio queue join timeout')
+  asyncio.create_task(put_all())
+  # fut = asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
+  # if threading.current_thread().name == 'serial':
+  #   # If serial thread, block and wait for broadcast
+  #   try:
+  #     fut.result()
+  #   except concurrent.futures.CancelledError:
+  #     pass
 
 
 def make_get_ws(profile_handler, write_queue):
@@ -282,8 +286,8 @@ def make_get_ws(profile_handler, write_queue):
     try:
       # Let the writer thread handle updating thresholds.
       threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-      write_queue.put(threshold_cmd, block=False)
-    except queue.Full:
+      write_queue.put_nowait(threshold_cmd)
+    except asyncio.QueueFull:
       logger.error('Could not update thresholds. Queue full.')
 
 
@@ -393,7 +397,13 @@ async def on_shutdown(app):
 def main():
   profile_handler = ProfileHandler()
   profile_handler.Load()
-  write_queue = queue.Queue(10)
+  write_queue = asyncio.Queue(10)
+
+  async def on_startup(app):
+    if NO_SERIAL:
+      asyncio.create_task(run_fake_serial(write_queue=write_queue, profile_handler=profile_handler))
+    else:
+      asyncio.create_task(run_serial(port=SERIAL_PORT, timeout=0.05, write_queue=write_queue, profile_handler=profile_handler))
 
   app = web.Application()
 
@@ -411,12 +421,7 @@ def main():
       web.static('/', build_dir),
     ])
   app.on_shutdown.append(on_shutdown)
-
-  if NO_SERIAL:
-    serial_thread = threading.Thread(target=run_fake_serial, name='serial', kwargs={'write_queue': write_queue, 'profile_handler': profile_handler})
-  else:
-    serial_thread = threading.Thread(target=run_serial, name='serial', kwargs={'port': SERIAL_PORT, 'timeout': 0.05, 'write_queue': write_queue, 'profile_handler': profile_handler})
-  serial_thread.start()
+  app.on_startup.append(on_startup)
 
   hostname = socket.gethostname()
   ip_address = socket.gethostbyname(hostname)
