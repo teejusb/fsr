@@ -342,7 +342,6 @@ async def get_ws(request):
 
   request.app['websockets'].append(ws)
   print('Client connected')
-  profile_handler.MaybeLoad()
 
   # The above does emit if there are differences, so have an extra for the
   # case there are no differences.
@@ -422,6 +421,8 @@ async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
 async def on_startup(app):
+  profile_handler.MaybeLoad()
+
   read_thread = threading.Thread(target=serial_handler.Read)
   read_thread.start()
 
