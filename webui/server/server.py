@@ -3,12 +3,13 @@ import asyncio
 import logging
 import os
 import socket
+import sys
 import threading
 from collections import OrderedDict
 from random import normalvariate
 
 import serial
-from aiohttp import web, WSCloseCode, WSMsgType
+from aiohttp import web, WSMsgType
 from aiohttp.web import json_response
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,14 @@ sensor_numbers = range(num_panels)
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
-# One asyncio queue per open websocket, for broadcasting messages to all clients
-out_queues = set()
+# Queue for broadcasting sensor values
+out_queue = asyncio.Queue(maxsize=1)
 
-# Used to coordinate updates to out_queues.
-out_queues_lock = asyncio.Lock()
+# Queue for 
+receive_queue = asyncio.Queue(maxsize=1)
 
-# Allow serial thread to schedule coroutines to run on the main thread.
-main_thread_loop = asyncio.get_event_loop()
-
+# Used to coordinate updates to app['websockets'] set
+websockets_lock = asyncio.Lock()
 
 class ProfileHandler(object):
   """
@@ -58,6 +58,12 @@ class ProfileHandler(object):
     # Have a default no-name profile we can use in case there are no profiles.
     self.profiles[''] = [0] * num_panels
 
+  def __PersistProfiles(self):
+    with open(self.filename, 'w') as f:
+      for name, thresholds in self.profiles.items():
+        if name:
+          f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
+
   def Load(self):
     num_profiles = 0
     if os.path.exists(self.filename):
@@ -68,7 +74,6 @@ class ProfileHandler(object):
             self.profiles[parts[0]] = [int(x) for x in parts[1:]]
             num_profiles += 1
             # Change to the first profile found.
-            # This will also emit the thresholds.
             if num_profiles == 1:
               self.ChangeProfile(parts[0])
     else:
@@ -76,31 +81,21 @@ class ProfileHandler(object):
     print('Found Profiles: ' + str(list(self.profiles.keys())))
 
   def GetCurThresholds(self):
-    if self.cur_profile in self.profiles:
-      return self.profiles[self.cur_profile]
-    else:
-      # Should never get here assuming cur_profile is always appropriately
-      # updated, but you never know.
-      self.ChangeProfile('')
-      return self.profiles[self.cur_profile]
+    if not self.cur_profile in self.profiles:
+      raise RuntimeError("Current profile name is missing from profile list")
+    return self.profiles[self.cur_profile]
 
   def UpdateThresholds(self, index, value):
-    if self.cur_profile in self.profiles:
-      self.profiles[self.cur_profile][index] = value
-      with open(self.filename, 'w') as f:
-        for name, thresholds in self.profiles.items():
-          if name:
-            f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
-      print('Thresholds are: ' + str(self.GetCurThresholds()))
+    if not self.cur_profile in self.profiles:
+      raise RuntimeError("Current profile name is missing from profile list")
+    self.profiles[self.cur_profile][index] = value
+    self.__PersistProfiles()
 
   def ChangeProfile(self, profile_name):
-    if profile_name in self.profiles:
-      self.cur_profile = profile_name
-      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
-      broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
-      print('Changed to profile "{}" with thresholds: {}'.format(
-        self.GetCurrentProfile(), str(self.GetCurThresholds())))
+    if not profile_name in self.profiles:
+      print(profile_name, " not in ", self.profiles)
+      raise RuntimeError("Selected profile name is missing from profile list")
+    self.cur_profile = profile_name
 
   def GetProfileNames(self):
     return [name for name in self.profiles.keys() if name]
@@ -109,30 +104,17 @@ class ProfileHandler(object):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
       self.profiles[''] = [0] * num_panels
-    # ChangeProfile emits 'thresholds' and 'cur_profile'
     self.ChangeProfile(profile_name)
-    with open(self.filename, 'w') as f:
-      for name, thresholds in self.profiles.items():
-        if name:
-          f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-    broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
-    print('Added profile "{}" with thresholds: {}'.format(
-      self.GetCurrentProfile(), str(self.GetCurThresholds())))
+    self.__PersistProfiles()
 
   def RemoveProfile(self, profile_name):
-    if profile_name in self.profiles:
-      del self.profiles[profile_name]
-      if profile_name == self.cur_profile:
-        self.ChangeProfile('')
-      with open(self.filename, 'w') as f:
-        for name, thresholds in self.profiles.items():
-          if name:
-            f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
-      broadcast(['get_profiles', {'profiles': self.GetProfileNames()}])
-      broadcast(['thresholds', {'thresholds': self.GetCurThresholds()}])
-      broadcast(['get_cur_profile', {'cur_profile': self.GetCurrentProfile()}])
-      print('Removed profile "{}". Current thresholds are: {}'.format(
-        profile_name, str(self.GetCurThresholds())))
+    if not profile_name in self.profiles:
+      print(profile_name, " not in ", self.profiles)
+      raise RuntimeError("Selected profile name is missing from profile list")
+    del self.profiles[profile_name]
+    if profile_name == self.cur_profile:
+      self.ChangeProfile('')
+    self.__PersistProfiles()
 
   def GetCurrentProfile(self):
     return self.cur_profile
@@ -156,13 +138,14 @@ async def run_fake_serial(write_queue, profile_handler):
         max(0, min(no_serial_values[i] + offsets[i], 1023))
         for i in range(num_panels)
       ]
-      broadcast(['values', {'values': no_serial_values}])
-    elif command == 't\n':
-      if command[0] == 't':
-        broadcast(['thresholds',
-          {'thresholds': profile_handler.GetCurThresholds()}])
-        print('Thresholds are: ' +
-          str(profile_handler.GetCurThresholds()))
+      # broadcast(['values', {'values': no_serial_values}])
+      out_queue.put_nowait(['values', {'values': no_serial_values}])
+    # elif command == 't\n':
+    #   if command[0] == 't':
+    #     broadcast(['thresholds',
+    #       {'thresholds': profile_handler.GetCurThresholds()}])
+    #     print('Thresholds are: ' +
+    #       str(profile_handler.GetCurThresholds()))
 
 
 async def run_serial(port, timeout, write_queue, profile_handler):
@@ -179,12 +162,15 @@ async def run_serial(port, timeout, write_queue, profile_handler):
   """
   ser = None
 
-  def ProcessValues(values):
+  async def ProcessValues(values):
     # Fix our sensor ordering.
     actual = []
     for i in range(num_panels):
       actual.append(values[sensor_numbers[i]])
-    broadcast(['values', {'values': actual}])
+    try:
+      out_queue.put_nowait(['values', {'values': actual}])
+    except asyncio.QueueFull:
+      print('queue full')
 
   def ProcessThresholds(values):
     cur_thresholds = profile_handler.GetCurThresholds()
@@ -246,11 +232,94 @@ async def run_serial(port, timeout, write_queue, profile_handler):
       values = [int(x) for x in parts[1:]]
 
       if cmd == 'v':
-        ProcessValues(values)
-      elif cmd == 't':
-        ProcessThresholds(values)
+        await ProcessValues(values)
+      # elif cmd == 't':
+      #   ProcessThresholds(values)
     except serial.SerialException as e:
       logger.error('Error reading data: ', e)
+
+async def run_websockets(app, write_queue, profile_handler):
+  async def send_json_all(msg):
+    websockets = app['websockets'].copy()
+    for ws in websockets:
+      if not ws.closed:
+        await ws.send_json(msg)
+
+  async def update_threshold(values, index):
+    profile_handler.UpdateThresholds(index, values[index])
+    try:
+      threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+      await asyncio.wait_for(write_queue.put(threshold_cmd), timeout=0.1)
+    except asyncio.TimeoutError:
+      logger.error('Could not update thresholds. Queue full.')
+    await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
+
+  async def add_profile(profile_name, thresholds):
+    profile_handler.AddProfile(profile_name, thresholds)
+    # When we add a profile, we are using the currently loaded thresholds so we
+    # don't need to explicitly apply anything.
+    await send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
+    print('Added profile "{}" with thresholds: {}'.format(
+      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    print('Changed to profile "{}" with thresholds: {}'.format(
+      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+
+  async def remove_profile(profile_name):
+    profile_handler.RemoveProfile(profile_name)
+    # Need to apply the thresholds of the profile we've fallen back to.
+    thresholds = profile_handler.GetCurThresholds()
+    for i in range(len(thresholds)):
+      await update_threshold(thresholds, i)
+    await send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
+    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    print('Removed profile "{}". Current thresholds are: {}'.format(
+      profile_name, str(profile_handler.GetCurThresholds())))
+
+  async def change_profile(profile_name):
+    profile_handler.ChangeProfile(profile_name)
+    # Need to apply the thresholds of the profile we've changed to.
+    thresholds = profile_handler.GetCurThresholds()
+    for i in range(len(thresholds)):
+      await update_threshold(thresholds, i)
+    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    print('Changed to profile "{}" with thresholds: {}'.format(
+      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+
+  try:
+    out_queue_task = asyncio.create_task(out_queue.get())
+    receive_queue_task = asyncio.create_task(receive_queue.get())
+    while True:
+      done, pending = await asyncio.wait([out_queue_task, receive_queue_task], return_when=asyncio.FIRST_COMPLETED)
+
+      for task in done:
+        if task == out_queue_task:
+          msg = await task
+          await send_json_all(msg)
+          out_queue.task_done()
+          out_queue_task = asyncio.create_task(out_queue.get())
+        if task == receive_queue_task:
+          data = await task
+
+          action = data[0]
+
+          if action == 'update_threshold':
+            values, index = data[1:]
+            await update_threshold(values, index)
+          elif action == 'add_profile':
+            profile_name, thresholds = data[1:]
+            await add_profile(profile_name, thresholds)
+          elif action == 'remove_profile':
+            profile_name, = data[1:]
+            await remove_profile(profile_name)
+          elif action == 'change_profile':
+            profile_name, = data[1:]
+            await change_profile(profile_name)
+          receive_queue.task_done()
+          receive_queue_task = asyncio.create_task(receive_queue.get())
+  except RuntimeError:
+    sys.exit(1)
 
 def make_get_defaults(profile_handler):
   async def get_defaults(request):
@@ -261,137 +330,42 @@ def make_get_defaults(profile_handler):
     })
   return get_defaults
 
-def broadcast(msg):
-  async def put_all():
-    async with out_queues_lock:
-      for q in out_queues:
-        await q.put(msg)
-      # for q in out_queues:
-      #   try:
-      #     await asyncio.wait_for(q.join(), timeout=0.1)
-      #   except asyncio.TimeoutError:
-      #     print('asyncio queue join timeout')
-  asyncio.create_task(put_all())
-  # fut = asyncio.run_coroutine_threadsafe(put_all(), main_thread_loop)
-  # if threading.current_thread().name == 'serial':
-  #   # If serial thread, block and wait for broadcast
-  #   try:
-  #     fut.result()
-  #   except concurrent.futures.CancelledError:
-  #     pass
+async def get_ws(request):
+  this_task = asyncio.current_task()
+  ws = web.WebSocketResponse()
+  await ws.prepare(request)
 
-
-def make_get_ws(profile_handler, write_queue):
-  def update_threshold(values, index):
-    try:
-      # Let the writer thread handle updating thresholds.
-      threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-      write_queue.put_nowait(threshold_cmd)
-    except asyncio.QueueFull:
-      logger.error('Could not update thresholds. Queue full.')
-
-
-  def add_profile(profile_name, thresholds):
-    profile_handler.AddProfile(profile_name, thresholds)
-    # When we add a profile, we are using the currently loaded thresholds so we
-    # don't need to explicitly apply anything.
-
-
-  def remove_profile(profile_name):
-    profile_handler.RemoveProfile(profile_name)
-    # Need to apply the thresholds of the profile we've fallen back to.
-    thresholds = profile_handler.GetCurThresholds()
-    for i in range(len(thresholds)):
-      update_threshold(thresholds, i)
-
-
-  def change_profile(profile_name):
-    profile_handler.ChangeProfile(profile_name)
-    # Need to apply the thresholds of the profile we've changed to.
-    thresholds = profile_handler.GetCurThresholds()
-    for i in range(len(thresholds)):
-      update_threshold(thresholds, i)
-
-  async def get_ws(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-
-    request.app['websockets'].append(ws)
-    print('Client connected')
-
-    # # Potentially fetch any threshold values from the microcontroller that
-    # # may be out of sync with our profiles.
-    # serial_handler.write_queue.put('t\n', block=False)
-
-    queue = asyncio.Queue(maxsize=100)
-    async with out_queues_lock:
-      out_queues.add(queue)
-
-    try:
-      queue_task = asyncio.create_task(queue.get())
-      receive_task = asyncio.create_task(ws.receive())
-      connected = True
-
-      while connected:
-        done, pending = await asyncio.wait([
-          queue_task,
-          receive_task,
-        ], return_when=asyncio.FIRST_COMPLETED)
-
-        for task in done:
-          if task == queue_task:
-            msg = await queue_task
-            await ws.send_json(msg)
-            queue.task_done()
-
-            queue_task = asyncio.create_task(queue.get())
-          elif task == receive_task and not ws.closed:
-            msg = await receive_task
-
-            if msg.type == WSMsgType.TEXT:
-              data = msg.json()
-              action = data[0]
-
-              if action == 'update_threshold':
-                values, index = data[1:]
-                update_threshold(values, index)
-              elif action == 'add_profile':
-                profile_name, thresholds = data[1:]
-                add_profile(profile_name, thresholds)
-              elif action == 'remove_profile':
-                profile_name, = data[1:]
-                remove_profile(profile_name)
-              elif action == 'change_profile':
-                profile_name, = data[1:]
-                change_profile(profile_name)
-            elif msg.type == WSMsgType.CLOSE:
-              connected = False
-              continue
-
-            receive_task = asyncio.create_task(ws.receive())
-    except ConnectionResetError:
-      pass
-    finally:
-      request.app['websockets'].remove(ws)
-      async with out_queues_lock:
-        out_queues.remove(queue)
-      queue_task.cancel()
-      receive_task.cancel()
-      print('Client disconnected')
+  async with websockets_lock:
+    request.app['websockets'].add(ws)
+    request.app['websocket-tasks'].add(this_task)
+  print('Client connected')
   
-  return get_ws
+  try:
+    while not ws.closed:
+      msg = await ws.receive()
+      if msg.type == WSMsgType.CLOSE:
+        break
+      elif msg.type == WSMsgType.TEXT:
+        data = msg.json()
+      print("putting", data)
+      await receive_queue.put(data)
+  finally:
+    async with websockets_lock:
+      request.app['websockets'].remove(ws)
+      request.app['websocket-tasks'].remove(this_task)
+    print('Client disconnected')
 
 build_dir = os.path.abspath(
   os.path.join(os.path.dirname(__file__), '..', 'build')
 )
 
-
 async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
 async def on_shutdown(app):
-  for ws in app['websockets']:
-    await ws.close(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
+  async with websockets_lock:
+    for task in app['websocket-tasks']:
+      task.cancel()
   thread_stop_event.set()
 
 def main():
@@ -405,14 +379,18 @@ def main():
     else:
       asyncio.create_task(run_serial(port=SERIAL_PORT, timeout=0.05, write_queue=write_queue, profile_handler=profile_handler))
 
+    asyncio.create_task(run_websockets(app=app, write_queue=write_queue, profile_handler=profile_handler))
+
   app = web.Application()
 
-  # List of open websockets, to close when the app shuts down.
-  app['websockets'] = []
+  # Set of open websockets used to broadcast messages to all clients.
+  app['websockets'] = set()
+  # Set of open websocket tasks to cancel when the app shuts down.
+  app['websocket-tasks'] = set()
 
   app.add_routes([
     web.get('/defaults', make_get_defaults(profile_handler)),
-    web.get('/ws', make_get_ws(profile_handler, write_queue)),
+    web.get('/ws', get_ws),
   ])
   if not NO_SERIAL:
     app.add_routes([
