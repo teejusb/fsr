@@ -610,6 +610,9 @@ function FSRWebUI(props) {
   }
 
   function RemoveProfile(e) {
+    // The X button is inside the Change Profile button, so stop the event from bubbling up to it.
+    // Another fix would be changing the profile menu layout.
+    e.stopPropagation();
     // Strip out the "X " added by the button.
     const profile_name = e.target.parentNode.innerText.replace('X ', '');
     emit(['remove_profile', profile_name]);
