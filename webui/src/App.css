@@ -25,3 +25,25 @@
 .App-link {
   color: #61dafb;
 }
+
+.ValueMonitor-row {
+  height: 100%;
+  overflow: hidden;
+}
+
+.ValueMonitor-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.ValueMonitor-canvas {
+  border: 1px solid white;
+  touch-action: none;
+  flex: 1 0 auto;
+  height: 0;
+}
+
+.ValueMonitor-buttons,
+.ValueMonitor-label {
+  flex: 0 0 auto;
+}
