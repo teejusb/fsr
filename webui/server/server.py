@@ -27,6 +27,9 @@ sensor_numbers = range(num_panels)
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
+# Track whether there is an active serial connection
+serial_connected = False
+
 # Queue for websocket Tasks to pass messages they receive from clients to the run_websockets task.
 receive_queue = asyncio.Queue(maxsize=1)
 
@@ -189,6 +192,7 @@ class SerialHandler(object):
 
 
 async def run_websockets(app, serial_handler, profile_handler):
+  global serial_connected
   async def send_json_all(msg):
     websockets = app['websockets'].copy()
     for ws in websockets:
@@ -282,21 +286,25 @@ async def run_websockets(app, serial_handler, profile_handler):
     try:
       await asyncio.to_thread(lambda: serial_handler.Open())
       print("Serial connected")
-    except serial.SerialException:
-      print("Couldn't connect to serial. Retrying...")
-      await asyncio.sleep(1)
+      serial_connected = True
+    except serial.SerialException as e:
+      logger.exception('Can\'t connect to serial: %s', e)
+      await asyncio.sleep(3)
       continue
     try:
       await task_loop()
     except serial.SerialException as e:
-      # In case of serial error, disconnect all clients and try to connect again
+      # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
       logger.exception('Serial error: %s', e)
+      serial_connected = False
       async with websockets_lock:
         for task in app['websocket-tasks']:
           task.cancel()
 
 def make_get_defaults(profile_handler):
   async def get_defaults(request):
+    if not serial_connected:
+     return json_response({}, status=503)
     return json_response({
       'profiles': profile_handler.GetProfileNames(),
       'cur_profile': profile_handler.GetCurrentProfile(),
@@ -305,6 +313,8 @@ def make_get_defaults(profile_handler):
   return get_defaults
 
 async def get_ws(request):
+  if not serial_connected:
+    return json_response({}, status=503)
   this_task = asyncio.current_task()
   ws = web.WebSocketResponse()
   await ws.prepare(request)

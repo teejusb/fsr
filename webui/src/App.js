@@ -38,7 +38,13 @@ function useDefaults() {
 
     const getDefaults = () => {
       clearTimeout(timeoutId);
-      fetch('/defaults').then(res => res.json()).then(data => {
+      fetch('/defaults').then(res => {
+        if (res.status === 200) {
+          return res.json();
+        } else {
+          throw new Error();
+        }
+      }).then(data => {
         if (!cleaningUp) {
           setDefaults(data);
         }
