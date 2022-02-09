@@ -4,7 +4,6 @@ import logging
 import os
 import socket
 import sys
-import threading
 from collections import OrderedDict
 from random import normalvariate
 
@@ -17,9 +16,6 @@ logger = logging.getLogger(__name__)
 # Edit this to match the serial port name shown in Arduino IDE
 SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
-
-# Event to tell the serial thread to exit.
-thread_stop_event = threading.Event()
 
 # Amount of panels.
 num_panels = 4
@@ -165,10 +161,8 @@ class SerialHandler(object):
     self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
 
   def Close(self):
-    try:
+    if self.ser and not self.ser.closed:
       self.ser.close()
-    except:
-      pass
     self.ser = None
   
   def isOpen(self):
@@ -188,7 +182,7 @@ class SerialHandler(object):
     #   cmd num1 num2 num3 num4
     parts = line.split()
     if len(parts) != num_panels + 1:
-      raise CommandFormatError
+      raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_panels + 1))
     cmd = parts[0]
     values = [int(x) for x in parts[1:]]
     return cmd, values
@@ -203,12 +197,8 @@ async def run_websockets(app, serial_handler, profile_handler):
 
   async def update_threshold(values, index):
     profile_handler.UpdateThresholds(index, values[index])
-    try:
-      threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-      await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
-    except:
-      print("Serial error")
-      sys.exit(1)
+    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+    await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
@@ -247,18 +237,16 @@ async def run_websockets(app, serial_handler, profile_handler):
   async def get_values():
     try:
       return await asyncio.to_thread(lambda: serial_handler.Send('v\n'))
-    except:
-      print("Serial error")
+    except CommandFormatError as e:
+      logger.exception("Bad response from v command: %s", e)
       sys.exit(1)
   
   async def report_values(values):
     await send_json_all(['values', {'values': values}])
 
-  await asyncio.to_thread(lambda: serial_handler.Open())
-
   poll_values_wait_seconds = 0.01
 
-  try:
+  async def task_loop():
     poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
     receive_queue_task = asyncio.create_task(receive_queue.get())
     while True:
@@ -266,8 +254,9 @@ async def run_websockets(app, serial_handler, profile_handler):
 
       for task in done:
         if task == poll_values_task:
-          v, values = await get_values()
-          await report_values(values)
+          if len(app['websockets']) > 0:
+            v, values = await get_values()
+            await report_values(values)
           poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
         if task == receive_queue_task:
           data = await task
@@ -288,8 +277,23 @@ async def run_websockets(app, serial_handler, profile_handler):
             await change_profile(profile_name)
           receive_queue.task_done()
           receive_queue_task = asyncio.create_task(receive_queue.get())
-  except RuntimeError:
-    sys.exit(1)
+  
+  while True:
+    try:
+      await asyncio.to_thread(lambda: serial_handler.Open())
+      print("Serial connected")
+    except serial.SerialException:
+      print("Couldn't connect to serial. Retrying...")
+      await asyncio.sleep(1)
+      continue
+    try:
+      await task_loop()
+    except serial.SerialException as e:
+      # In case of serial error, disconnect all clients and try to connect again
+      logger.exception('Serial error: %s', e)
+      async with websockets_lock:
+        for task in app['websocket-tasks']:
+          task.cancel()
 
 def make_get_defaults(profile_handler):
   async def get_defaults(request):
@@ -322,6 +326,7 @@ async def get_ws(request):
     async with websockets_lock:
       request.app['websockets'].remove(ws)
       request.app['websocket-tasks'].remove(this_task)
+    await ws.close()
     print('Client disconnected')
 
 build_dir = os.path.abspath(
@@ -335,7 +340,6 @@ async def on_shutdown(app):
   async with websockets_lock:
     for task in app['websocket-tasks']:
       task.cancel()
-  thread_stop_event.set()
 
 def main():
   profile_handler = ProfileHandler()
