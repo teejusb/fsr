@@ -121,6 +121,7 @@ class FakeSerialHandler(object):
      # Use this to store the values when emulating serial so the graph isn't too
      # jumpy. Only used when NO_SERIAL is true.
     self.__no_serial_values = [0] * num_panels
+    self.__thresholds = [0] * num_panels
 
   def Open(self):
     self.__is_open = True
@@ -140,7 +141,11 @@ class FakeSerialHandler(object):
       ]
       return 'v', self.__no_serial_values.copy()
     elif command == 't\n':
-      return 't', [0] * num_panels
+      return 't', self.__thresholds.copy()
+    elif "0123456789".find(command[0]) != -1:
+      sensor_index = int(command[0])
+      self.__thresholds[sensor_index] = int(command[1:])
+      return 't', self.__thresholds.copy()
 
 class CommandFormatError(Exception):
   pass
@@ -285,13 +290,21 @@ async def run_websockets(app, serial_handler, profile_handler):
   while True:
     try:
       await asyncio.to_thread(lambda: serial_handler.Open())
-      print("Serial connected")
+      print('Serial connected')
       serial_connected = True
     except serial.SerialException as e:
       logger.exception('Can\'t connect to serial: %s', e)
       await asyncio.sleep(3)
       continue
     try:
+      # Send current thresholds on connect
+      cur_thresholds = profile_handler.GetCurThresholds()
+      for i, threshold in enumerate(cur_thresholds):
+        threshold_cmd = str(i) + str(threshold) + '\n'
+        t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+      if not str(cur_thresholds) == str(thresholds):
+        print('Microcontroller did not save thresholds. Profile: {}, MCU: {}'.format(str(cur_thresholds), str(thresholds)))
+        sys.exit(1)
       await task_loop()
     except serial.SerialException as e:
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
