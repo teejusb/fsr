@@ -119,126 +119,85 @@ class ProfileHandler(object):
   def GetCurrentProfile(self):
     return self.cur_profile
 
-async def run_fake_serial(write_queue, profile_handler):
-  # Use this to store the values when emulating serial so the graph isn't too
-  # jumpy. Only used when NO_SERIAL is true.
-  no_serial_values = [0] * num_panels
+class FakeSerialHandler(object):
+  def __init__(self):
+    self.__is_open = False
+     # Use this to store the values when emulating serial so the graph isn't too
+     # jumpy. Only used when NO_SERIAL is true.
+    self.__no_serial_values = [0] * num_panels
 
-  while not thread_stop_event.is_set():
-    # Check for command from write_queue
-    try:
-      # The timeout here controls the frequency of checking sensor values.
-      command = await asyncio.wait_for(write_queue.get(), timeout=0.01)
-    except asyncio.TimeoutError:
-      # If there is no other pending command, check sensor values.
-      command = 'v\n'
+  def Open(self):
+    self.__is_open = True
+
+  def Close(self):
+    self.__is_open = False  
+
+  def isOpen(self):
+    return self.__is_open
+
+  def Send(self, command):
     if command == 'v\n':
       offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
-      no_serial_values = [
-        max(0, min(no_serial_values[i] + offsets[i], 1023))
+      self.__no_serial_values = [
+        max(0, min(self.__no_serial_values[i] + offsets[i], 1023))
         for i in range(num_panels)
       ]
-      # broadcast(['values', {'values': no_serial_values}])
-      out_queue.put_nowait(['values', {'values': no_serial_values}])
-    # elif command == 't\n':
-    #   if command[0] == 't':
-    #     broadcast(['thresholds',
-    #       {'thresholds': profile_handler.GetCurThresholds()}])
-    #     print('Thresholds are: ' +
-    #       str(profile_handler.GetCurThresholds()))
+      return 'v', self.__no_serial_values.copy()
+    elif command == 't\n':
+      return 't', [0] * num_panels
 
+class CommandFormatError(Exception):
+  pass
 
-async def run_serial(port, timeout, write_queue, profile_handler):
+class SerialHandler(object):
   """
-  A function to handle all the serial interactions. Run in a separate Task.
+  A class to handle all the serial interactions.
 
-  Parameters:
+  Attributes:
+    ser: Serial, the serial object opened by this class.
     port: string, the path/name of the serial object to open.
     timeout: int, the time in seconds indicating the timeout for serial
       operations.
-    write_queue: asyncio queue of serial writes
-    profile_handler: ProfileHandler, the global profile_handler used to update
-      the thresholds
   """
-  ser = None
+  def __init__(self, port, timeout=1):
+    self.ser = None
+    self.port = port
+    self.timeout = timeout
+  
+  def Open(self):
+    self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
 
-  async def ProcessValues(values):
-    # Fix our sensor ordering.
-    actual = []
-    for i in range(num_panels):
-      actual.append(values[sensor_numbers[i]])
+  def Close(self):
     try:
-      out_queue.put_nowait(['values', {'values': actual}])
-    except asyncio.QueueFull:
-      print('queue full')
+      self.ser.close()
+    except:
+      pass
+    self.ser = None
+  
+  def isOpen(self):
+    return self.ser and self.ser.isOpen()
 
-  def ProcessThresholds(values):
-    cur_thresholds = profile_handler.GetCurThresholds()
-    # Fix our sensor ordering.
-    actual = []
-    for i in range(num_panels):
-      actual.append(values[sensor_numbers[i]])
-    for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
-      if cur != act:
-        profile_handler.UpdateThresholds(i, act)
+  def Send(self, command):
+    self.ser.write(command.encode())
 
-  while not thread_stop_event.is_set():
-    # Try to open the serial port if needed
-    if not ser:
-      try:
-        def open_serial():
-          return serial.Serial(port, 115200, timeout=timeout)
-        ser = await asyncio.to_thread(open_serial)
-      except serial.SerialException as e:
-        ser = None
-        logger.exception('Error opening serial: %s', e)
-        # Delay and retry
-        await asyncio.sleep(1)
-        continue
-    # Check for command from write_queue
-    try:
-      # The timeout here controls the frequency of checking sensor values.
-      command = await asyncio.wait_for(write_queue.get(), timeout=0.01)
-    except asyncio.TimeoutError:
-      # If there is no other pending command, check sensor values.
-      command = 'v\n'
-    try:
-      def write_command():
-        ser.write(command.encode())
-      await asyncio.to_thread(write_command)
-    except serial.SerialException as e:
-      logger.error('Error writing data: ', e)
-      # Maybe we need to surface the error higher up?
-      continue
-    try:
-      # Wait for a response.
-      # This will block the thread until it gets a newline or until the serial timeout.
-      def read_line():
-        return ser.readline().decode('ascii')
-      line = await asyncio.to_thread(read_line)
+    line = self.ser.readline().decode('ascii')
 
-      if not line.endswith("\n"):
-        logger.error('Timeout reading response to command.', command, line)
-        continue
+    if not line.endswith('\n'):
+      raise TimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
-      line = line.strip()
+    line = line.strip()
 
-      # All commands are of the form:
-      #   cmd num1 num2 num3 num4
-      parts = line.split()
-      if len(parts) != num_panels+1:
-        continue
-      cmd = parts[0]
-      values = [int(x) for x in parts[1:]]
+    # All commands are of the form:
+    #   cmd num1 num2 num3 num4
+    parts = line.split()
+    if len(parts) != num_panels + 1:
+      raise CommandFormatError
+    cmd = parts[0]
+    values = [int(x) for x in parts[1:]]
+    return cmd, values
 
-      if cmd == 'v':
-        await ProcessValues(values)
-      # elif cmd == 't':
-      #   ProcessThresholds(values)
-    except serial.SerialException as e:
-      logger.error('Error reading data: ', e)
 
-async def run_websockets(app, write_queue, profile_handler):
+async def run_websockets(app, serial_handler, profile_handler):
   async def send_json_all(msg):
     websockets = app['websockets'].copy()
     for ws in websockets:
@@ -249,9 +208,12 @@ async def run_websockets(app, write_queue, profile_handler):
     profile_handler.UpdateThresholds(index, values[index])
     try:
       threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-      await asyncio.wait_for(write_queue.put(threshold_cmd), timeout=0.1)
-    except asyncio.TimeoutError:
-      logger.error('Could not update thresholds. Queue full.')
+      if not serial_handler.isOpen():
+        await asyncio.to_thread(lambda: serial_handler.Open())
+      await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+    except:
+      print("Serial error")
+      sys.exit(1)
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
@@ -371,15 +333,14 @@ async def on_shutdown(app):
 def main():
   profile_handler = ProfileHandler()
   profile_handler.Load()
-  write_queue = asyncio.Queue(10)
+
+  if NO_SERIAL:
+    serial_handler = FakeSerialHandler()
+  else:
+    serial_handler = SerialHandler(port=SERIAL_PORT, timeout=0.05)
 
   async def on_startup(app):
-    if NO_SERIAL:
-      asyncio.create_task(run_fake_serial(write_queue=write_queue, profile_handler=profile_handler))
-    else:
-      asyncio.create_task(run_serial(port=SERIAL_PORT, timeout=0.05, write_queue=write_queue, profile_handler=profile_handler))
-
-    asyncio.create_task(run_websockets(app=app, write_queue=write_queue, profile_handler=profile_handler))
+    asyncio.create_task(run_websockets(app=app, serial_handler=serial_handler, profile_handler=profile_handler))
 
   app = web.Application()
 
