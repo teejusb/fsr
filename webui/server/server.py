@@ -31,10 +31,7 @@ sensor_numbers = range(num_panels)
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
-# Queue for broadcasting sensor values
-out_queue = asyncio.Queue(maxsize=1)
-
-# Queue for 
+# Queue for websocket Tasks to pass messages they receive from clients to the run_websockets task.
 receive_queue = asyncio.Queue(maxsize=1)
 
 # Used to coordinate updates to app['websockets'] set
@@ -208,8 +205,6 @@ async def run_websockets(app, serial_handler, profile_handler):
     profile_handler.UpdateThresholds(index, values[index])
     try:
       threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
-      if not serial_handler.isOpen():
-        await asyncio.to_thread(lambda: serial_handler.Open())
       await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     except:
       print("Serial error")
@@ -249,18 +244,31 @@ async def run_websockets(app, serial_handler, profile_handler):
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
+  async def get_values():
+    try:
+      return await asyncio.to_thread(lambda: serial_handler.Send('v\n'))
+    except:
+      print("Serial error")
+      sys.exit(1)
+  
+  async def report_values(values):
+    await send_json_all(['values', {'values': values}])
+
+  await asyncio.to_thread(lambda: serial_handler.Open())
+
+  poll_values_wait_seconds = 0.01
+
   try:
-    out_queue_task = asyncio.create_task(out_queue.get())
+    poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
     receive_queue_task = asyncio.create_task(receive_queue.get())
     while True:
-      done, pending = await asyncio.wait([out_queue_task, receive_queue_task], return_when=asyncio.FIRST_COMPLETED)
+      done, pending = await asyncio.wait([poll_values_task, receive_queue_task], return_when=asyncio.FIRST_COMPLETED)
 
       for task in done:
-        if task == out_queue_task:
-          msg = await task
-          await send_json_all(msg)
-          out_queue.task_done()
-          out_queue_task = asyncio.create_task(out_queue.get())
+        if task == poll_values_task:
+          v, values = await get_values()
+          await report_values(values)
+          poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
         if task == receive_queue_task:
           data = await task
 
@@ -309,7 +317,6 @@ async def get_ws(request):
         break
       elif msg.type == WSMsgType.TEXT:
         data = msg.json()
-      print("putting", data)
       await receive_queue.put(data)
   finally:
     async with websockets_lock:
