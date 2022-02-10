@@ -20,9 +20,6 @@ HTTP_PORT = 5000
 # Amount of panels.
 num_panels = 4
 
-# Initialize panel ids.
-sensor_numbers = range(num_panels)
-
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
@@ -206,7 +203,7 @@ async def run_websockets(app, serial_handler, profile_handler):
 
   async def update_threshold(values, index):
     profile_handler.UpdateThresholds(index, values[index])
-    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+    threshold_cmd = str(index) + str(values[index]) + '\n'
     await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
