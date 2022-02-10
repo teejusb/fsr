@@ -17,9 +17,6 @@ logger = logging.getLogger(__name__)
 SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
-# Amount of panels.
-num_panels = 4
-
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
@@ -44,12 +41,13 @@ class ProfileHandler(object):
     loaded: bool, whether or not the backend has already loaded the
       profile data file or not.
   """
-  def __init__(self, filename='profiles.txt'):
+  def __init__(self, num_panels, filename='profiles.txt'):
+    self.num_panels = num_panels
     self.filename = filename
     self.profiles = OrderedDict()
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = [0] * num_panels
+    self.profiles[''] = [0] * self.num_panels
 
   def __PersistProfiles(self):
     with open(self.filename, 'w') as f:
@@ -63,7 +61,7 @@ class ProfileHandler(object):
       with open(self.filename, 'r') as f:
         for line in f:
           parts = line.split()
-          if len(parts) == (num_panels+1):
+          if len(parts) == (self.num_panels + 1):
             self.profiles[parts[0]] = [int(x) for x in parts[1:]]
             num_profiles += 1
             # Change to the first profile found.
@@ -96,7 +94,7 @@ class ProfileHandler(object):
   def AddProfile(self, profile_name, thresholds):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
-      self.profiles[''] = [0] * num_panels
+      self.profiles[''] = [0] * self.num_panels
     self.ChangeProfile(profile_name)
     self.__PersistProfiles()
 
@@ -113,12 +111,13 @@ class ProfileHandler(object):
     return self.cur_profile
 
 class FakeSerialHandler(object):
-  def __init__(self):
+  def __init__(self, num_panels=4):
     self.__is_open = False
+    self.__num_panels = num_panels
      # Use this to store the values when emulating serial so the graph isn't too
-     # jumpy. Only used when NO_SERIAL is true.
-    self.__no_serial_values = [0] * num_panels
-    self.__thresholds = [0] * num_panels
+     # jumpy.
+    self.__no_serial_values = [0] * self.__num_panels
+    self.__thresholds = [0] * self.__num_panels
 
   def Open(self):
     self.__is_open = True
@@ -131,10 +130,10 @@ class FakeSerialHandler(object):
 
   def Send(self, command):
     if command == 'v\n':
-      offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
+      offsets = [int(normalvariate(0, self.__num_panels + 1)) for _ in range(self.__num_panels)]
       self.__no_serial_values = [
         max(0, min(self.__no_serial_values[i] + offsets[i], 1023))
-        for i in range(num_panels)
+        for i in range(self.__num_panels)
       ]
       return 'v', self.__no_serial_values.copy()
     elif command == 't\n':
@@ -145,6 +144,9 @@ class FakeSerialHandler(object):
       return 't', self.__thresholds.copy()
 
 class CommandFormatError(Exception):
+  pass
+
+class SerialTimeoutError(Exception):
   pass
 
 class SerialHandler(object):
@@ -179,25 +181,24 @@ class SerialHandler(object):
     line = self.ser.readline().decode('ascii')
 
     if not line.endswith('\n'):
-      raise TimeoutError('Timeout reading response to command. {} {}'.format(command, line))
+      raise SerialTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
     line = line.strip()
 
     # All commands are of the form:
     #   cmd num1 num2 num3 num4
     parts = line.split()
-    if len(parts) != num_panels + 1:
-      raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_panels + 1))
+    # if len(parts) != num_panels + 1:
+    #   raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_panels + 1))
     cmd = parts[0]
     values = [int(x) for x in parts[1:]]
     return cmd, values
 
 
 async def run_websockets(app, serial_handler, get_defaults):
-  profile_handler = ProfileHandler()
-  profile_handler.Load()
-
   global serial_connected
+  profile_handler = None
+
   async def send_json_all(msg):
     websockets = app['websockets'].copy()
     for ws in websockets:
@@ -292,6 +293,11 @@ async def run_websockets(app, serial_handler, get_defaults):
       await asyncio.to_thread(lambda: serial_handler.Open())
       print('Serial connected')
       serial_connected = True
+      # Retrieve current thresholds on connect, and establish number of panels
+      t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send('t\n'))
+      profile_handler = ProfileHandler(num_panels=len(thresholds))
+      profile_handler.Load()
+      # Handle to GET /defaults using new profile_handler
       async def get_defaults_handler(request):
         return json_response({
           'profiles': profile_handler.GetProfileNames(),
@@ -299,15 +305,10 @@ async def run_websockets(app, serial_handler, get_defaults):
           'thresholds': profile_handler.GetCurThresholds()
         })
       get_defaults.set_handler(get_defaults_handler)
-      # Send current thresholds on connect
-      cur_thresholds = profile_handler.GetCurThresholds()
-      for i, threshold in enumerate(cur_thresholds):
-        threshold_cmd = str(i) + str(threshold) + '\n'
-        t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
-      if not str(cur_thresholds) == str(thresholds):
-        print('Microcontroller did not save thresholds. Profile: {}, MCU: {}'.format(str(cur_thresholds), str(thresholds)))
-        sys.exit(1)
       await task_loop()
+    except SerialTimeoutError as e:
+      logger.exception('Serial timeout: %s', e)
+      continue
     except serial.SerialException as e:
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
       serial_handler.Close()
