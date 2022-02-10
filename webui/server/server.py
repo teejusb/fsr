@@ -76,10 +76,18 @@ class ProfileHandler(object):
       raise RuntimeError("Current profile name is missing from profile list")
     return self.profiles[self.cur_profile]
 
-  def UpdateThresholds(self, index, value):
+  def UpdateThreshold(self, index, value):
     if not self.cur_profile in self.profiles:
       raise RuntimeError("Current profile name is missing from profile list")
     self.profiles[self.cur_profile][index] = value
+    self.__PersistProfiles()
+
+  def UpdateThresholds(self, values):
+    if not self.cur_profile in self.profiles:
+      raise RuntimeError("Current profile name is missing from profile list")
+    if not len(values) == len(self.profiles[self.cur_profile]):
+      raise RuntimeError('Expected {} threshold values, got {}'.format(len(self.profiles[self.cur_profile]), values))
+    self.profiles[self.cur_profile] = values.copy()
     self.__PersistProfiles()
 
   def ChangeProfile(self, profile_name):
@@ -206,9 +214,17 @@ async def run_websockets(app, serial_handler, get_defaults):
         await ws.send_json(msg)
 
   async def update_threshold(values, index):
-    profile_handler.UpdateThresholds(index, values[index])
     threshold_cmd = str(index) + str(values[index]) + '\n'
-    await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+    t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+    profile_handler.UpdateThreshold(index, thresholds[index])
+    await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
+
+  async def update_thresholds(values):
+    for index, value in enumerate(values):
+      threshold_cmd = str(index) + str(value) + '\n'
+      t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+    profile_handler.UpdateThresholds(thresholds)
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
@@ -227,8 +243,7 @@ async def run_websockets(app, serial_handler, get_defaults):
     profile_handler.RemoveProfile(profile_name)
     # Need to apply the thresholds of the profile we've fallen back to.
     thresholds = profile_handler.GetCurThresholds()
-    for i in range(len(thresholds)):
-      await update_threshold(thresholds, i)
+    update_thresholds(thresholds)
     await send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
     await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Removed profile "{}". Current thresholds are: {}'.format(
@@ -238,8 +253,7 @@ async def run_websockets(app, serial_handler, get_defaults):
     profile_handler.ChangeProfile(profile_name)
     # Need to apply the thresholds of the profile we've changed to.
     thresholds = profile_handler.GetCurThresholds()
-    for i in range(len(thresholds)):
-      await update_threshold(thresholds, i)
+    update_thresholds(thresholds)
     await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
@@ -296,7 +310,14 @@ async def run_websockets(app, serial_handler, get_defaults):
       # Retrieve current thresholds on connect, and establish number of panels
       t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send('t\n'))
       profile_handler = ProfileHandler(num_panels=len(thresholds))
+
+      # Load profiles
       profile_handler.Load()
+
+      # Send current thresholds from loaded profile, then write back from MCU to profiles.
+      thresholds = profile_handler.GetCurThresholds()
+      await update_thresholds(thresholds)
+
       # Handle to GET /defaults using new profile_handler
       async def get_defaults_handler(request):
         return json_response({
