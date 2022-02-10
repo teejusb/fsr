@@ -37,7 +37,7 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 ### Testing and using the serial monitor
 1. Open `Tools` > `Serial Monitor` to open the Serial Monitor
 1. Within the serial monitor, enter `t` to show current thresholds.
-1. You can change a sensor threshold by entering numbers, where the first number is the sensor (0-indexed) followed by the threshold value. For example, `3180` would set the 4th sensor to 180 thresholds.  You can change these more easily in the UI later.
+1. You can change a sensor threshold by entering numbers, where the first number is the sensor (0-indexed) followed by the threshold value. For example, `3 180` would set the 4th sensor to 180 thresholds.  You can change these more easily in the UI later.
 1. Enter `v` to get the current sensor values.
 1. Putting pressure on an FSR, you should notice the values change if you enter `v` again while maintaining pressure.
 

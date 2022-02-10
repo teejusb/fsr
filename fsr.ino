@@ -473,8 +473,18 @@ class SerialProcessor {
         case 'T':
           PrintThresholds();
           break;
-        default:
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
           UpdateAndPrintThreshold(bytes_read);
+        default:
           break;
       }
     }  
@@ -482,19 +492,20 @@ class SerialProcessor {
 
   void UpdateAndPrintThreshold(size_t bytes_read) {
     // Need to specify:
-    // Sensor number + Threshold value.
-    // {0, 1, 2, 3} + "0"-"1023"
-    // e.g. 3180 (fourth FSR, change threshold to 180)
+    // Sensor number + Threshold value, separated by a space.
+    // {0, 1, 2, 3,...} + "0"-"1023"
+    // e.g. 3 180 (fourth FSR, change threshold to 180)
     
-    if (bytes_read < 2 || bytes_read > 5) { return; }
-    
-    size_t sensor_index = buffer_[0] - '0';
-    //this works for chars < '0' because they will
-    //also be > kNumSensors due to uint underflow.
+    if (bytes_read < 3 || bytes_read > 7) { return; }
+
+    char* next = nullptr;
+    size_t sensor_index = strtoul(buffer_, &next, 10);
     if (sensor_index >= kNumSensors) { return; }
 
-    kSensors[sensor_index].UpdateThreshold(
-        strtoul(buffer_ + 1, nullptr, 10));
+    int16_t sensor_threshold = strtol(next, nullptr, 10);
+    if (sensor_threshold < 0 || sensor_threshold > 1023) { return; }
+
+    kSensors[sensor_index].UpdateThreshold(sensor_threshold);
     PrintThresholds();
   }
 

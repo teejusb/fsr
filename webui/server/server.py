@@ -214,7 +214,7 @@ async def run_websockets(app, serial_handler, get_defaults):
         await ws.send_json(msg)
 
   async def update_threshold(values, index):
-    threshold_cmd = str(index) + str(values[index]) + '\n'
+    threshold_cmd = str(index) + ' ' + str(values[index]) + '\n'
     t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     profile_handler.UpdateThreshold(index, thresholds[index])
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
@@ -222,7 +222,7 @@ async def run_websockets(app, serial_handler, get_defaults):
 
   async def update_thresholds(values):
     for index, value in enumerate(values):
-      threshold_cmd = str(index) + str(value) + '\n'
+      threshold_cmd = str(index) + ' ' + str(value) + '\n'
       t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     profile_handler.UpdateThresholds(thresholds)
     await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
