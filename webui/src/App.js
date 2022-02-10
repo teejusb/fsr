@@ -409,9 +409,12 @@ function ValueMonitors(props) {
 
 function Plot(props) {
   const canvasRef = React.useRef(null);
-  const colors = ['red', 'orange', 'green', 'blue'];
-  const display = [true, true, true, true];
+  const numSensors = props.numSensors;
   const webUIDataRef = props.webUIDataRef;
+  const display = new Array(numSensors).fill(true);
+  const colors = ['red', 'orange', 'green', 'blue'];
+  // `buttonNames` is only used if the number of sensors matches the number of button names.
+  const buttonNames = ['Left', 'Down', 'Up', 'Right'];
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
 
@@ -466,6 +469,7 @@ function Plot(props) {
       const spacing = 10;
       const box_width = canvas.width-spacing*2;
       const box_height = canvas.height-spacing*2
+      ctx.strokeStyle = 'darkgray';
       ctx.beginPath();
       ctx.rect(spacing, spacing, box_width, box_height);
       ctx.stroke();
@@ -481,11 +485,11 @@ function Plot(props) {
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/MAX_SIZE;
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; i++) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = colors[i];
+          ctx.strokeStyle = colors[i % colors.length];
           ctx.lineWidth = 2;
           for (let j = 0; j < MAX_SIZE; ++j) {
             if (j === curValues.length) { break; }
@@ -502,11 +506,11 @@ function Plot(props) {
       }
 
       // Display the current thresholds.
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = 'dark' + colors[i];
+          ctx.strokeStyle = 'dark' + colors[i % colors.length];
           ctx.lineWidth = 2;
           ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
@@ -516,9 +520,9 @@ function Plot(props) {
 
       // Display the current value for each of the sensors.
       ctx.font = "30px " + bodyFontFamily;
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
-          ctx.fillStyle = colors[i];
+          ctx.fillStyle = colors[i % colors.length];
           if (curValues.length < MAX_SIZE) {
             ctx.fillText(curValues[curValues.length-1][i], 100 + i * 100, 100);
           } else {
@@ -537,10 +541,22 @@ function Plot(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, curThresholds, curValues, display, webUIDataRef]);
+  }, [colors, curThresholds, curValues, display, numSensors, webUIDataRef])
 
   function ToggleLine(index) {
     display[index] = !display[index];
+  }
+
+  const toggleButtons = [];
+  for (let i = 0; i < numSensors; i++) {
+    toggleButtons.push(
+      <>
+        <Button key={i} variant="light" size="sm" onClick={() => ToggleLine(i)}>
+          <b style={{color: colors[i % colors.length]}}>{numSensors === buttonNames.length ? buttonNames[i] : i}</b>
+        </Button>
+        <span> </span>
+      </>
+    );
   }
 
   return (
@@ -549,21 +565,7 @@ function Plot(props) {
         <Row>
           <Col style={{height: '9vh', paddingTop: '2vh'}}>
             <span>Display: </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(0)}>
-              <b style={{color: colors[0]}}>Left</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(1)}>
-              <b style={{color: colors[1]}}>Down</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(2)}>
-              <b style={{color: colors[2]}}>Up</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(3)}>
-              <b style={{color: colors[3]}}>Right</b>
-            </Button>
+            {toggleButtons}
           </Col>
         </Row>
         <Row>
@@ -670,7 +672,7 @@ function FSRWebUI(props) {
             </ValueMonitors>
           </Route>
           <Route path="/plot">
-            <Plot webUIDataRef={webUIDataRef} />
+            <Plot numSensors={numSensors} webUIDataRef={webUIDataRef} />
           </Route>
         </Switch>
       </Router>
