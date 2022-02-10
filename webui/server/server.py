@@ -151,7 +151,8 @@ class SerialHandler(object):
     self.ser = None
     self.port = port
     self.timeout = timeout
-    self.write_queue = queue.Queue(10)
+    # Sized for `num_panels` threshold updates plus one "v" command
+    self.write_queue = queue.Queue(num_panels + 1)
     self.profile_handler = profile_handler
 
     # Use this to store the values when emulating serial so the graph isn't too
@@ -178,7 +179,7 @@ class SerialHandler(object):
       if self.ser:
         # Apply currently loaded thresholds when the microcontroller connects.
         for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
+          threshold_cmd = str(sensor_numbers[i]) + ' ' + str(threshold) + '\n'
           self.write_queue.put(threshold_cmd, block=False)
     except queue.Full as e:
       logger.error('Could not set thresholds. Queue full.')
@@ -286,7 +287,7 @@ serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
-    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+    threshold_cmd = str(sensor_numbers[index]) + ' ' + str(values[index]) + '\n'
     serial_handler.write_queue.put(threshold_cmd, block=False)
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
