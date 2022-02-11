@@ -512,7 +512,7 @@ function Plot(props) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = colors[i];
+          ctx.strokeStyle = darkColors[i];
           ctx.lineWidth = 2;
           ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
@@ -563,8 +563,8 @@ function Plot(props) {
         checked={display[i]}
         variant={display[i] ? "light" : "secondary"}
         size="sm"
-        onChange={() => ToggleLine(i)
-      }>
+        onChange={() => ToggleLine(i)}
+      >
         <b style={{color: display[i] ? darkColors[i] : "#f8f9fa"}}>
           {numSensors === buttonNames.length ? buttonNames[i] : i}
         </b>
