@@ -487,7 +487,7 @@ function Plot(props) {
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/MAX_SIZE;
-      for (let i = 0; i < numSensors; i++) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
@@ -543,7 +543,7 @@ function Plot(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, curThresholds, curValues, darkColors, display, numSensors, webUIDataRef])
+  }, [colors, curThresholds, curValues, darkColors, display, numSensors, webUIDataRef]);
 
   const ToggleLine = (index) => {
     setDisplay(display => {
