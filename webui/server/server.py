@@ -22,11 +22,11 @@ HTTP_PORT = 5000
 # Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
-# Amount of panels.
-num_panels = 4
+# Amount of sensors.
+num_sensors = 4
 
-# Initialize panel ids.
-sensor_numbers = range(num_panels)
+# Initialize sensor ids.
+sensor_numbers = range(num_sensors)
 
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
@@ -49,7 +49,7 @@ class ProfileHandler(object):
     self.profiles = OrderedDict()
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = [0] * num_panels
+    self.profiles[''] = [0] * num_sensors
     self.loaded = False
 
   def MaybeLoad(self):
@@ -59,7 +59,7 @@ class ProfileHandler(object):
         with open(self.filename, 'r') as f:
           for line in f:
             parts = line.split()
-            if len(parts) == (num_panels+1):
+            if len(parts) == (num_sensors+1):
               self.profiles[parts[0]] = [int(x) for x in parts[1:]]
               num_profiles += 1
               # Change to the first profile found.
@@ -104,7 +104,7 @@ class ProfileHandler(object):
   def AddProfile(self, profile_name, thresholds):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
-      self.profiles[''] = [0] * num_panels
+      self.profiles[''] = [0] * num_sensors
     # ChangeProfile emits 'thresholds' and 'cur_profile'
     self.ChangeProfile(profile_name)
     with open(self.filename, 'w') as f:
@@ -151,12 +151,12 @@ class SerialHandler(object):
     self.ser = None
     self.port = port
     self.timeout = timeout
-    self.write_queue = queue.Queue(10)
+    self.write_queue = queue.Queue(num_sensors + 10)
     self.profile_handler = profile_handler
 
     # Use this to store the values when emulating serial so the graph isn't too
     # jumpy. Only used when NO_SERIAL is true.
-    self.no_serial_values = [0] * num_panels
+    self.no_serial_values = [0] * num_sensors
 
   def ChangePort(self, port):
     if self.ser:
@@ -178,7 +178,7 @@ class SerialHandler(object):
       if self.ser:
         # Apply currently loaded thresholds when the microcontroller connects.
         for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
+          threshold_cmd = '%d %d\n' % (sensor_numbers[i], threshold)
           self.write_queue.put(threshold_cmd, block=False)
     except queue.Full as e:
       logger.error('Could not set thresholds. Queue full.')
@@ -190,7 +190,7 @@ class SerialHandler(object):
     def ProcessValues(values):
       # Fix our sensor ordering.
       actual = []
-      for i in range(num_panels):
+      for i in range(num_sensors):
         actual.append(values[sensor_numbers[i]])
       broadcast(['values', {'values': actual}])
       time.sleep(0.01)
@@ -199,7 +199,7 @@ class SerialHandler(object):
       cur_thresholds = self.profile_handler.GetCurThresholds()
       # Fix our sensor ordering.
       actual = []
-      for i in range(num_panels):
+      for i in range(num_sensors):
         actual.append(values[sensor_numbers[i]])
       for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
         if cur != act:
@@ -207,10 +207,10 @@ class SerialHandler(object):
 
     while not thread_stop_event.isSet():
       if NO_SERIAL:
-        offsets = [int(normalvariate(0, num_panels+1)) for _ in range(num_panels)]
+        offsets = [int(normalvariate(0, num_sensors+1)) for _ in range(num_sensors)]
         self.no_serial_values = [
           max(0, min(self.no_serial_values[i] + offsets[i], 1023))
-          for i in range(num_panels)
+          for i in range(num_sensors)
         ]
         broadcast(['values', {'values': self.no_serial_values}])
         time.sleep(0.01)
@@ -233,7 +233,7 @@ class SerialHandler(object):
           # All commands are of the form:
           #   cmd num1 num2 num3 num4
           parts = line.split()
-          if len(parts) != num_panels+1:
+          if len(parts) != num_sensors+1:
             continue
           cmd = parts[0]
           values = [int(x) for x in parts[1:]]
@@ -286,7 +286,7 @@ serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
-    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+    threshold_cmd = '%d %d\n' % (sensor_numbers[index], values[index])
     serial_handler.write_queue.put(threshold_cmd, block=False)
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
