@@ -47,3 +47,13 @@
 .ValueMonitor-label {
   flex: 0 0 auto;
 }
+
+.ToggleButton-plot-sensor {
+  margin-right: 0.75em;
+}
+
+.ToggleButton-plot-sensor > input {
+  position: absolute;
+  clip: rect(0,0,0,0);
+  pointer-events: none;
+}

@@ -13,6 +13,7 @@ import Col from 'react-bootstrap/Col'
 
 import Form from 'react-bootstrap/Form'
 import Button from 'react-bootstrap/Button'
+import ToggleButton from 'react-bootstrap/ToggleButton'
 
 import {
   BrowserRouter as Router,
@@ -411,12 +412,16 @@ function Plot(props) {
   const canvasRef = React.useRef(null);
   const numSensors = props.numSensors;
   const webUIDataRef = props.webUIDataRef;
-  const display = new Array(numSensors).fill(true);
-  const colors = ['red', 'orange', 'green', 'blue'];
+  const [display, setDisplay] = useState(new Array(numSensors).fill(true));
   // `buttonNames` is only used if the number of sensors matches the number of button names.
   const buttonNames = ['Left', 'Down', 'Up', 'Right'];
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
+
+  // Color values for sensors
+  const degreesPerSensor = 360 / numSensors;
+  const colors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 40%)`);
+  const darkColors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 35%)`)
 
   useEffect(() => {
     let requestId;
@@ -459,10 +464,7 @@ function Plot(props) {
       previousTimestamp = timestamp;
 
       // Add background fill.
-      let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
-      grd.addColorStop(0, 'white');
-      grd.addColorStop(1, 'lightgray');
-      ctx.fillStyle = grd;
+      ctx.fillStyle = "#f8f9fa";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Border
@@ -489,7 +491,7 @@ function Plot(props) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = colors[i % colors.length];
+          ctx.strokeStyle = colors[i];
           ctx.lineWidth = 2;
           for (let j = 0; j < MAX_SIZE; ++j) {
             if (j === curValues.length) { break; }
@@ -510,7 +512,7 @@ function Plot(props) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = 'dark' + colors[i % colors.length];
+          ctx.strokeStyle = colors[i];
           ctx.lineWidth = 2;
           ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
@@ -522,7 +524,7 @@ function Plot(props) {
       ctx.font = "30px " + bodyFontFamily;
       for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
-          ctx.fillStyle = colors[i % colors.length];
+          ctx.fillStyle = colors[i];
           if (curValues.length < MAX_SIZE) {
             ctx.fillText(curValues[curValues.length-1][i], 100 + i * 100, 100);
           } else {
@@ -541,21 +543,32 @@ function Plot(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, curThresholds, curValues, display, numSensors, webUIDataRef])
+  }, [colors, curThresholds, curValues, darkColors, display, numSensors, webUIDataRef])
 
-  function ToggleLine(index) {
-    display[index] = !display[index];
-  }
+  const ToggleLine = (index) => {
+    setDisplay(display => {
+      const updated = [...display];
+      updated[index] = !updated[index];
+      return updated;
+    });
+  };
 
   const toggleButtons = [];
   for (let i = 0; i < numSensors; i++) {
     toggleButtons.push(
-      <>
-        <Button key={i} variant="light" size="sm" onClick={() => ToggleLine(i)}>
-          <b style={{color: colors[i % colors.length]}}>{numSensors === buttonNames.length ? buttonNames[i] : i}</b>
-        </Button>
-        <span> </span>
-      </>
+      <ToggleButton
+        className="ToggleButton-plot-sensor"
+        key={i}
+        type="checkbox"
+        checked={display[i]}
+        variant={display[i] ? "light" : "secondary"}
+        size="sm"
+        onChange={() => ToggleLine(i)
+      }>
+        <b style={{color: display[i] ? darkColors[i] : "#f8f9fa"}}>
+          {numSensors === buttonNames.length ? buttonNames[i] : i}
+        </b>
+      </ToggleButton>
     );
   }
 
