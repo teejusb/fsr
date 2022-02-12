@@ -21,12 +21,6 @@ HTTP_PORT = 5000
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
-# Track whether there is an active serial connection
-serial_connected = False
-
-# Queue for websocket Tasks to pass messages they receive from clients to the run_websockets task.
-receive_queue = asyncio.Queue(maxsize=1)
-
 # Used to coordinate updates to app['websockets'] set
 websockets_lock = asyncio.Lock()
 
@@ -203,8 +197,7 @@ class SerialHandler(object):
     return cmd, values
 
 
-async def run_websockets(app, serial_handler, defaults_handler):
-  global serial_connected
+async def run_websockets(app, websocket_handler, serial_handler, defaults_handler):
   profile_handler = None
 
   async def send_json_all(msg):
@@ -272,9 +265,9 @@ async def run_websockets(app, serial_handler, defaults_handler):
 
   async def task_loop():
     poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
-    receive_queue_task = asyncio.create_task(receive_queue.get())
+    receive_json_task = asyncio.create_task(websocket_handler.receive_json())
     while True:
-      done, pending = await asyncio.wait([poll_values_task, receive_queue_task], return_when=asyncio.FIRST_COMPLETED)
+      done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
 
       for task in done:
         if task == poll_values_task:
@@ -282,7 +275,7 @@ async def run_websockets(app, serial_handler, defaults_handler):
             v, values = await get_values()
             await report_values(values)
           poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
-        if task == receive_queue_task:
+        if task == receive_json_task:
           data = await task
 
           action = data[0]
@@ -299,14 +292,14 @@ async def run_websockets(app, serial_handler, defaults_handler):
           elif action == 'change_profile':
             profile_name, = data[1:]
             await change_profile(profile_name)
-          receive_queue.task_done()
-          receive_queue_task = asyncio.create_task(receive_queue.get())
+            websocket_handler.task_done()
+          receive_json_task = asyncio.create_task(websocket_handler.receive_json())
   
   while True:
     try:
       await asyncio.to_thread(lambda: serial_handler.Open())
       print('Serial connected')
-      serial_connected = True
+      websocket_handler.serial_connected = True
       # Retrieve current thresholds on connect, and establish number of panels
       t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send('t\n'))
       profile_handler = ProfileHandler(num_sensors=len(thresholds))
@@ -328,39 +321,54 @@ async def run_websockets(app, serial_handler, defaults_handler):
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
       serial_handler.Close()
       logger.exception('Serial error: %s', e)
-      serial_connected = False
+      websocket_handler.serial_connected = False
       defaults_handler.set_profile_handler(None)
       async with websockets_lock:
         for task in app['websocket-tasks']:
           task.cancel()
       await asyncio.sleep(3)
 
-async def get_ws(request):
-  if not serial_connected:
-    return json_response({}, status=503)
-  this_task = asyncio.current_task()
-  ws = web.WebSocketResponse()
-  await ws.prepare(request)
+class WebSocketHandler(object):
+  def __init__(self):
+    # Queue to pass messages to main Task
+    self.__receive_queue = asyncio.Queue(maxsize=1)
+    # Set when connecting or disconnecting serial device.
+    self.serial_connected = False
 
-  async with websockets_lock:
-    request.app['websockets'].add(ws)
-    request.app['websocket-tasks'].add(this_task)
-  print('Client connected')
+  async def receive_json(self):
+    return await self.__receive_queue.get()
 
-  try:
-    while not ws.closed:
-      msg = await ws.receive()
-      if msg.type == WSMsgType.CLOSE:
-        break
-      elif msg.type == WSMsgType.TEXT:
-        data = msg.json()
-      await receive_queue.put(data)
-  finally:
+  # Call after processing the json from receive_json
+  def task_done(self):
+    self.__receive_queue.task_done()
+
+  async def handle_ws(self, request):
+    if not self.serial_connected:
+      return json_response({}, status=503)
+
+    this_task = asyncio.current_task()
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
     async with websockets_lock:
-      request.app['websockets'].remove(ws)
-      request.app['websocket-tasks'].remove(this_task)
-    await ws.close()
-    print('Client disconnected')
+      request.app['websockets'].add(ws)
+      request.app['websocket-tasks'].add(this_task)
+    print('Client connected')
+
+    try:
+      while not ws.closed:
+        msg = await ws.receive()
+        if msg.type == WSMsgType.CLOSE:
+          break
+        elif msg.type == WSMsgType.TEXT:
+          data = msg.json()
+        await self.__receive_queue.put(data)
+    finally:
+      async with websockets_lock:
+        request.app['websockets'].remove(ws)
+        request.app['websocket-tasks'].remove(this_task)
+      await ws.close()
+      print('Client disconnected')
 
 build_dir = os.path.abspath(
   os.path.join(os.path.dirname(__file__), '..', 'build')
@@ -393,6 +401,7 @@ class DefaultsHandler(object):
 
 def main():
   defaults_handler = DefaultsHandler()
+  websocket_handler = WebSocketHandler()
 
   if NO_SERIAL:
     serial_handler = FakeSerialHandler()
@@ -400,7 +409,7 @@ def main():
     serial_handler = SerialHandler(port=SERIAL_PORT, timeout=0.05)
 
   async def on_startup(app):
-    asyncio.create_task(run_websockets(app=app, serial_handler=serial_handler, defaults_handler=defaults_handler))
+    asyncio.create_task(run_websockets(app=app, websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
 
   app = web.Application()
 
@@ -411,7 +420,7 @@ def main():
 
   app.add_routes([
     web.get('/defaults', defaults_handler.handle_defaults),
-    web.get('/ws', get_ws),
+    web.get('/ws', websocket_handler.handle_ws),
   ])
   if not NO_SERIAL:
     app.add_routes([
