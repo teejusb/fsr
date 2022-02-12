@@ -194,7 +194,7 @@ class SerialHandler(object):
     return cmd, values
 
 
-async def run_websockets(app, websocket_handler, serial_handler, defaults_handler):
+async def run_websockets(websocket_handler, serial_handler, defaults_handler):
   profile_handler = None
 
   async def update_threshold(values, index):
@@ -417,7 +417,7 @@ def main():
     serial_handler = SerialHandler(port=SERIAL_PORT, timeout=0.05)
 
   async def on_startup(app):
-    asyncio.create_task(run_websockets(app=app, websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
+    asyncio.create_task(run_websockets(websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
 
   async def on_shutdown(app):
     await websocket_handler.cancel_ws_tasks()
