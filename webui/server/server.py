@@ -41,13 +41,13 @@ class ProfileHandler(object):
     loaded: bool, whether or not the backend has already loaded the
       profile data file or not.
   """
-  def __init__(self, num_panels, filename='profiles.txt'):
-    self.num_panels = num_panels
+  def __init__(self, num_sensors, filename='profiles.txt'):
+    self.num_sensors = num_sensors
     self.filename = filename
     self.profiles = OrderedDict()
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = [0] * self.num_panels
+    self.profiles[''] = [0] * self.num_sensors
 
   def __PersistProfiles(self):
     with open(self.filename, 'w') as f:
@@ -61,7 +61,7 @@ class ProfileHandler(object):
       with open(self.filename, 'r') as f:
         for line in f:
           parts = line.split()
-          if len(parts) == (self.num_panels + 1):
+          if len(parts) == (self.num_sensors + 1):
             self.profiles[parts[0]] = [int(x) for x in parts[1:]]
             num_profiles += 1
             # Change to the first profile found.
@@ -102,7 +102,7 @@ class ProfileHandler(object):
   def AddProfile(self, profile_name, thresholds):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
-      self.profiles[''] = [0] * self.num_panels
+      self.profiles[''] = [0] * self.num_sensors
     self.ChangeProfile(profile_name)
     self.__PersistProfiles()
 
@@ -119,13 +119,13 @@ class ProfileHandler(object):
     return self.cur_profile
 
 class FakeSerialHandler(object):
-  def __init__(self, num_panels=4):
+  def __init__(self, num_sensors=4):
     self.__is_open = False
-    self.__num_panels = num_panels
+    self.__num_sensors = num_sensors
      # Use this to store the values when emulating serial so the graph isn't too
      # jumpy.
-    self.__no_serial_values = [0] * self.__num_panels
-    self.__thresholds = [0] * self.__num_panels
+    self.__no_serial_values = [0] * self.__num_sensors
+    self.__thresholds = [0] * self.__num_sensors
 
   def Open(self):
     self.__is_open = True
@@ -138,10 +138,10 @@ class FakeSerialHandler(object):
 
   def Send(self, command):
     if command == 'v\n':
-      offsets = [int(normalvariate(0, self.__num_panels + 1)) for _ in range(self.__num_panels)]
+      offsets = [int(normalvariate(0, self.__num_sensors + 1)) for _ in range(self.__num_sensors)]
       self.__no_serial_values = [
         max(0, min(self.__no_serial_values[i] + offsets[i], 1023))
-        for i in range(self.__num_panels)
+        for i in range(self.__num_sensors)
       ]
       return 'v', self.__no_serial_values.copy()
     elif command == 't\n':
@@ -171,7 +171,7 @@ class SerialHandler(object):
     self.ser = None
     self.port = port
     self.timeout = timeout
-  
+
   def Open(self):
     self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
 
@@ -196,8 +196,8 @@ class SerialHandler(object):
     # All commands are of the form:
     #   cmd num1 num2 num3 num4
     parts = line.split()
-    # if len(parts) != num_panels + 1:
-    #   raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_panels + 1))
+    # if len(parts) != num_sensors + 1:
+    #   raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_sensors + 1))
     cmd = parts[0]
     values = [int(x) for x in parts[1:]]
     return cmd, values
@@ -309,7 +309,7 @@ async def run_websockets(app, serial_handler, defaults_handler):
       serial_connected = True
       # Retrieve current thresholds on connect, and establish number of panels
       t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send('t\n'))
-      profile_handler = ProfileHandler(num_panels=len(thresholds))
+      profile_handler = ProfileHandler(num_sensors=len(thresholds))
 
       # Load profiles
       profile_handler.Load()
@@ -346,7 +346,7 @@ async def get_ws(request):
     request.app['websockets'].add(ws)
     request.app['websocket-tasks'].add(this_task)
   print('Client connected')
-  
+
   try:
     while not ws.closed:
       msg = await ws.receive()
