@@ -203,7 +203,7 @@ class SerialHandler(object):
     return cmd, values
 
 
-async def run_websockets(app, serial_handler, get_defaults):
+async def run_websockets(app, serial_handler, defaults_handler):
   global serial_connected
   profile_handler = None
 
@@ -318,14 +318,8 @@ async def run_websockets(app, serial_handler, get_defaults):
       thresholds = profile_handler.GetCurThresholds()
       await update_thresholds(thresholds)
 
-      # Handle to GET /defaults using new profile_handler
-      async def get_defaults_handler(request):
-        return json_response({
-          'profiles': profile_handler.GetProfileNames(),
-          'cur_profile': profile_handler.GetCurrentProfile(),
-          'thresholds': profile_handler.GetCurThresholds()
-        })
-      get_defaults.set_handler(get_defaults_handler)
+      # Handle GET /defaults using new profile_handler
+      defaults_handler.set_profile_handler(profile_handler)
       await task_loop()
     except SerialTimeoutError as e:
       logger.exception('Serial timeout: %s', e)
@@ -335,7 +329,7 @@ async def run_websockets(app, serial_handler, get_defaults):
       serial_handler.Close()
       logger.exception('Serial error: %s', e)
       serial_connected = False
-      get_defaults.reset_handler()
+      defaults_handler.set_profile_handler(None)
       async with websockets_lock:
         for task in app['websocket-tasks']:
           task.cancel()
@@ -380,23 +374,25 @@ async def on_shutdown(app):
     for task in app['websocket-tasks']:
       task.cancel()
 
-class GetDefaults(object):
+class DefaultsHandler(object):
   def __init__(self):
-    self.reset_handler()
+    self.__profile_handler = None
 
-  def reset_handler(self):
-    async def handler(request):
-      json_response({}, status=503)
-    self.__handler = handler
+  def set_profile_handler(self, profile_handler):
+    self.__profile_handler = profile_handler
 
-  def set_handler(self, handler):
-    self.__handler = handler
-
-  async def get_defaults(self, request):
-    return await self.__handler(request)
+  async def handle_defaults(self, request):
+    if self.__profile_handler:
+      return json_response({
+        'profiles': self.__profile_handler.GetProfileNames(),
+        'cur_profile': self.__profile_handler.GetCurrentProfile(),
+        'thresholds': self.__profile_handler.GetCurThresholds()
+      })
+    else:
+      return json_response({}, status=503)
 
 def main():
-  get_defaults = GetDefaults()
+  defaults_handler = DefaultsHandler()
 
   if NO_SERIAL:
     serial_handler = FakeSerialHandler()
@@ -404,7 +400,7 @@ def main():
     serial_handler = SerialHandler(port=SERIAL_PORT, timeout=0.05)
 
   async def on_startup(app):
-    asyncio.create_task(run_websockets(app=app, serial_handler=serial_handler, get_defaults=get_defaults))
+    asyncio.create_task(run_websockets(app=app, serial_handler=serial_handler, defaults_handler=defaults_handler))
 
   app = web.Application()
 
@@ -414,7 +410,7 @@ def main():
   app['websocket-tasks'] = set()
 
   app.add_routes([
-    web.get('/defaults', get_defaults.get_defaults),
+    web.get('/defaults', defaults_handler.handle_defaults),
     web.get('/ws', get_ws),
   ])
   if not NO_SERIAL:
