@@ -21,9 +21,6 @@ HTTP_PORT = 5000
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
-# Used to coordinate updates to app['websockets'] set
-websockets_lock = asyncio.Lock()
-
 class ProfileHandler(object):
   """
   A class to handle all the profile modifications.
@@ -200,17 +197,11 @@ class SerialHandler(object):
 async def run_websockets(app, websocket_handler, serial_handler, defaults_handler):
   profile_handler = None
 
-  async def send_json_all(msg):
-    websockets = app['websockets'].copy()
-    for ws in websockets:
-      if not ws.closed:
-        await ws.send_json(msg)
-
   async def update_threshold(values, index):
     threshold_cmd = str(index) + ' ' + str(values[index]) + '\n'
     t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     profile_handler.UpdateThreshold(index, thresholds[index])
-    await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
   async def update_thresholds(values):
@@ -218,17 +209,17 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
       threshold_cmd = str(index) + ' ' + str(value) + '\n'
       t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
     profile_handler.UpdateThresholds(thresholds)
-    await send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
   async def add_profile(profile_name, thresholds):
     profile_handler.AddProfile(profile_name, thresholds)
     # When we add a profile, we are using the currently loaded thresholds so we
     # don't need to explicitly apply anything.
-    await send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
+    await websocket_handler.send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
     print('Added profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
-    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
@@ -236,9 +227,9 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
     profile_handler.RemoveProfile(profile_name)
     # Need to apply the thresholds of the profile we've fallen back to.
     thresholds = profile_handler.GetCurThresholds()
-    update_thresholds(thresholds)
-    await send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
-    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    await update_thresholds(thresholds)
+    await websocket_handler.send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
+    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Removed profile "{}". Current thresholds are: {}'.format(
       profile_name, str(profile_handler.GetCurThresholds())))
 
@@ -246,8 +237,8 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
     profile_handler.ChangeProfile(profile_name)
     # Need to apply the thresholds of the profile we've changed to.
     thresholds = profile_handler.GetCurThresholds()
-    update_thresholds(thresholds)
-    await send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    await update_thresholds(thresholds)
+    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
@@ -259,7 +250,7 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
       sys.exit(1)
   
   async def report_values(values):
-    await send_json_all(['values', {'values': values}])
+    await websocket_handler.send_json_all(['values', {'values': values}])
 
   poll_values_wait_seconds = 0.01
 
@@ -271,7 +262,7 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
 
       for task in done:
         if task == poll_values_task:
-          if len(app['websockets']) > 0:
+          if websocket_handler.has_clients():
             v, values = await get_values()
             await report_values(values)
           poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
@@ -323,18 +314,24 @@ async def run_websockets(app, websocket_handler, serial_handler, defaults_handle
       logger.exception('Serial error: %s', e)
       websocket_handler.serial_connected = False
       defaults_handler.set_profile_handler(None)
-      async with websockets_lock:
-        for task in app['websocket-tasks']:
-          task.cancel()
+      await websocket_handler.cancel_ws_tasks()
       await asyncio.sleep(3)
 
 class WebSocketHandler(object):
   def __init__(self):
-    # Queue to pass messages to main Task
-    self.__receive_queue = asyncio.Queue(maxsize=1)
     # Set when connecting or disconnecting serial device.
     self.serial_connected = False
+    # Queue to pass messages to main Task
+    self.__receive_queue = asyncio.Queue(maxsize=1)
+    # Used to coordinate updates to app['websockets'] set
+    self.__websockets_lock = asyncio.Lock()
+    # Set of open websockets used to broadcast messages to all clients.
+    self.__websockets = set()
+    # Set of open websocket tasks to cancel when the app shuts down.
+    self.__websocket_tasks = set()
 
+  # Only the task that opens a websocket is allowed to call receive on it,
+  # so call receive in the handler task and queue messages for other coroutines to read.
   async def receive_json(self):
     return await self.__receive_queue.get()
 
@@ -342,6 +339,22 @@ class WebSocketHandler(object):
   def task_done(self):
     self.__receive_queue.task_done()
 
+  async def send_json_all(self, msg):
+    # Iterate over copy of set in case the set is modified while awaiting a send
+    websockets = self.__websockets.copy()
+    for ws in websockets:
+      if not ws.closed:
+        await ws.send_json(msg)
+
+  async def cancel_ws_tasks(self):
+    async with self.__websockets_lock:
+      for task in self.__websocket_tasks:
+        task.cancel()
+  
+  def has_clients(self):
+    return len(self.__websockets) > 0
+
+  # Pass to router, this coroutine will be run in one task per connection
   async def handle_ws(self, request):
     if not self.serial_connected:
       return json_response({}, status=503)
@@ -350,9 +363,9 @@ class WebSocketHandler(object):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-    async with websockets_lock:
-      request.app['websockets'].add(ws)
-      request.app['websocket-tasks'].add(this_task)
+    async with self.__websockets_lock:
+      self.__websockets.add(ws)
+      self.__websocket_tasks.add(this_task)
     print('Client connected')
 
     try:
@@ -364,9 +377,9 @@ class WebSocketHandler(object):
           data = msg.json()
         await self.__receive_queue.put(data)
     finally:
-      async with websockets_lock:
-        request.app['websockets'].remove(ws)
-        request.app['websocket-tasks'].remove(this_task)
+      async with self.__websockets_lock:
+        self.__websockets.remove(ws)
+        self.__websocket_tasks.remove(this_task)
       await ws.close()
       print('Client disconnected')
 
@@ -376,11 +389,6 @@ build_dir = os.path.abspath(
 
 async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
-
-async def on_shutdown(app):
-  async with websockets_lock:
-    for task in app['websocket-tasks']:
-      task.cancel()
 
 class DefaultsHandler(object):
   def __init__(self):
@@ -411,12 +419,10 @@ def main():
   async def on_startup(app):
     asyncio.create_task(run_websockets(app=app, websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
 
-  app = web.Application()
+  async def on_shutdown(app):
+    await websocket_handler.cancel_ws_tasks()
 
-  # Set of open websockets used to broadcast messages to all clients.
-  app['websockets'] = set()
-  # Set of open websocket tasks to cancel when the app shuts down.
-  app['websocket-tasks'] = set()
+  app = web.Application()
 
   app.add_routes([
     web.get('/defaults', defaults_handler.handle_defaults),
