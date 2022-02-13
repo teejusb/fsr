@@ -60,7 +60,6 @@ class ProfileHandler(object):
               self.ChangeProfile(parts[0])
     else:
       open(self.filename, 'w').close()
-    print('Found Profiles: ' + str(list(self.profiles.keys())))
 
   def GetCurThresholds(self):
     if not self.cur_profile in self.profiles:
@@ -241,13 +240,15 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     thresholds = await serial_handler.update_threshold(index, values[index])
     profile_handler.UpdateThresholds(thresholds)
     await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
-    print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
+    print('Profile is "{}". Thresholds are: {}'.format(
+      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
     profile_handler.UpdateThresholds(thresholds)
     await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
-    print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
+    print('Profile is "{}". Thresholds are: {}'.format(
+      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def add_profile(profile_name, thresholds):
     profile_handler.AddProfile(profile_name, thresholds)
@@ -255,7 +256,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     # don't need to explicitly apply anything.
     await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
     await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
-    print('Changed to new profile "{}" with thresholds: {}'.format(
+    print('Changed to new profile "{}". Thresholds are: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def remove_profile(profile_name):
@@ -265,8 +266,8 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
     await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
-    print('Removed profile "{}". Current thresholds are: {}'.format(
-      profile_name, str(profile_handler.GetCurThresholds())))
+    print('Removed profile "{}" and changed to profile "{}". Thresholds are: {}'.format(
+      profile_name, profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def change_profile(profile_name):
     profile_handler.ChangeProfile(profile_name)
@@ -274,7 +275,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     thresholds = profile_handler.GetCurThresholds()
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
-    print('Changed to profile "{}" with thresholds: {}'.format(
+    print('Changed to profile "{}". Thresholds are: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   poll_values_wait_seconds = 0.01
@@ -322,10 +323,14 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
 
       # Load saved profiles
       profile_handler.Load()
+      print('Found Profiles: ' + str(list(profile_handler.GetProfileNames())))
 
       # Send current thresholds from loaded profile, then write back from MCU to profiles.
       thresholds = profile_handler.GetCurThresholds()
-      await update_thresholds(thresholds)
+      thresholds = await serial_handler.update_thresholds(thresholds)
+      profile_handler.UpdateThresholds(thresholds)
+      print('Profile is "{}". Thresholds are: {}'.format(
+        profile_handler.GetCurrentProfile(), profile_handler.GetCurThresholds()))
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
