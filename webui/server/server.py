@@ -278,40 +278,22 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     print('Changed to profile "{}". Thresholds are: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
-  poll_values_wait_seconds = 0.01
+  async def handle_client_message(data):
+    action = data[0]
 
-  async def task_loop():
-    poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
-    receive_json_task = asyncio.create_task(websocket_handler.receive_json())
-    while True:
-      done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
+    if action == 'update_threshold':
+      values, index = data[1:]
+      await update_threshold(values, index)
+    elif action == 'add_profile':
+      profile_name, thresholds = data[1:]
+      await add_profile(profile_name, thresholds)
+    elif action == 'remove_profile':
+      profile_name, = data[1:]
+      await remove_profile(profile_name)
+    elif action == 'change_profile':
+      profile_name, = data[1:]
+      await change_profile(profile_name)
 
-      for task in done:
-        if task == poll_values_task:
-          if websocket_handler.has_clients():
-            values = await serial_handler.get_values()
-            await websocket_handler.broadcast_values(values)
-          poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
-        if task == receive_json_task:
-          data = await task
-
-          action = data[0]
-
-          if action == 'update_threshold':
-            values, index = data[1:]
-            await update_threshold(values, index)
-          elif action == 'add_profile':
-            profile_name, thresholds = data[1:]
-            await add_profile(profile_name, thresholds)
-          elif action == 'remove_profile':
-            profile_name, = data[1:]
-            await remove_profile(profile_name)
-          elif action == 'change_profile':
-            profile_name, = data[1:]
-            await change_profile(profile_name)
-          websocket_handler.task_done()
-          receive_json_task = asyncio.create_task(websocket_handler.receive_json())
-  
   while True:
     try:
       await asyncio.to_thread(lambda: serial_handler.Open())
@@ -334,7 +316,27 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
-      await task_loop()
+      
+      # Minimum delay in seconds to wait betwen getting current sensor values
+      POLL_VALUES_WAIT_SECONDS = 1.0 / 100
+
+      # Poll sensor values and handle client message
+      poll_values_task = asyncio.create_task(asyncio.sleep(POLL_VALUES_WAIT_SECONDS))
+      receive_json_task = asyncio.create_task(websocket_handler.receive_json())
+      while True:
+        done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+          if task == poll_values_task:
+            if websocket_handler.has_clients():
+              values = await serial_handler.get_values()
+              await websocket_handler.broadcast_values(values)
+            poll_values_task = asyncio.create_task(asyncio.sleep(POLL_VALUES_WAIT_SECONDS))
+          if task == receive_json_task:
+            data = await task
+            await handle_client_message(data)
+            websocket_handler.task_done()
+            receive_json_task = asyncio.create_task(websocket_handler.receive_json())
+
     except SerialTimeoutError as e:
       logger.exception('Serial timeout: %s', e)
       continue
