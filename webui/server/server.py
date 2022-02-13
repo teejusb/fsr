@@ -266,7 +266,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
     await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
-    print('Removed profile "{}" and changed to profile "{}". Thresholds are: {}'.format(
+    print('Removed profile "{}". Profile is "{}". Thresholds are: {}'.format(
       profile_name, profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def change_profile(profile_name):
