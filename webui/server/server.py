@@ -240,24 +240,22 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
   async def update_threshold(values, index):
     thresholds = await serial_handler.update_threshold(index, values[index])
     profile_handler.UpdateThresholds(thresholds)
-    await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
     profile_handler.UpdateThresholds(thresholds)
-    await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
+    await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
   async def add_profile(profile_name, thresholds):
     profile_handler.AddProfile(profile_name, thresholds)
     # When we add a profile, we are using the currently loaded thresholds so we
     # don't need to explicitly apply anything.
-    await websocket_handler.send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
-    print('Added profile "{}" with thresholds: {}'.format(
-      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
-    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
-    print('Changed to profile "{}" with thresholds: {}'.format(
+    await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
+    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
+    print('Changed to new profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
 
   async def remove_profile(profile_name):
@@ -265,8 +263,8 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     # Need to apply the thresholds of the profile we've fallen back to.
     thresholds = profile_handler.GetCurThresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.send_json_all(['get_profiles', {'profiles': profile_handler.GetProfileNames()}])
-    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
+    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
     print('Removed profile "{}". Current thresholds are: {}'.format(
       profile_name, str(profile_handler.GetCurThresholds())))
 
@@ -275,12 +273,9 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     # Need to apply the thresholds of the profile we've changed to.
     thresholds = profile_handler.GetCurThresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
+    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
-  
-  async def report_values(values):
-    await websocket_handler.send_json_all(['values', {'values': values}])
 
   poll_values_wait_seconds = 0.01
 
@@ -294,7 +289,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
         if task == poll_values_task:
           if websocket_handler.has_clients():
             values = await serial_handler.get_values()
-            await report_values(values)
+            await websocket_handler.broadcast_values(values)
           poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
         if task == receive_json_task:
           data = await task
@@ -375,6 +370,22 @@ class WebSocketHandler(object):
     for ws in websockets:
       if not ws.closed:
         await ws.send_json(msg)
+  
+  async def broadcast_thresholds(self, thresholds):
+    """Send current thresholds to all connected clients"""
+    await self.send_json_all(['thresholds', {'thresholds': thresholds}])
+  
+  async def broadcast_values(self, values):
+    """Send current sensor values to all connected clients"""
+    await self.send_json_all(['values', {'values': values}])
+
+  async def broadcast_profiles(self, profiles):
+    """Send list of profile names to all connected clients"""
+    await self.send_json_all(['get_profiles', {'profiles': profiles}])
+
+  async def broadcast_cur_profile(self, cur_profile):
+    """Send name of current profile to all connected clients"""
+    await self.send_json_all(['get_cur_profile', {'cur_profile': cur_profile}])
 
   async def cancel_ws_tasks(self):
     async with self.__websockets_lock:
