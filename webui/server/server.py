@@ -116,89 +116,96 @@ class ProfileHandler(object):
     return self.cur_profile
 
 class FakeSerialHandler(object):
-  def __init__(self, num_sensors=4):
-    self.__is_open = False
-    self.__num_sensors = num_sensors
-     # Use this to store the values when emulating serial so the graph isn't too
-     # jumpy.
-    self.__no_serial_values = [0] * self.__num_sensors
-    self.__thresholds = [0] * self.__num_sensors
+  def __init__(self, num_sensors):
+    self._is_open = False
+    self._num_sensors = num_sensors
+    # Use previous values when randomly generating sensor readings
+    # so graph isn't too jumpy.
+    self._sensor_values = [0] * self._num_sensors
+    self._thresholds = [0] * self._num_sensors
 
-  def Open(self):
-    self.__is_open = True
+  async def open(self):
+    self._is_open = True
 
-  def Close(self):
-    self.__is_open = False  
+  def close(self):
+    self._is_open = False  
 
-  def isOpen(self):
-    return self.__is_open
+  def is_open(self):
+    return self._is_open
 
-  def Send(self, command):
-    if command == 'v\n':
-      offsets = [int(normalvariate(0, self.__num_sensors + 1)) for _ in range(self.__num_sensors)]
-      self.__no_serial_values = [
-        max(0, min(self.__no_serial_values[i] + offsets[i], 1023))
-        for i in range(self.__num_sensors)
-      ]
-      return 'v %s' % (' '.join(map(str, self.__no_serial_values)))
-    elif command == 't\n':
-      return 't %s' % (' '.join(map(str, self.__thresholds)))
-    elif "0123456789".find(command[0]) != -1:
-      sensor_index = int(command[0])
-      self.__thresholds[sensor_index] = int(command[1:])
-      return 't %s' % (' '.join(map(str, self.__thresholds)))
+  async def get_values(self):
+    offsets = [int(normalvariate(0, self._num_sensors + 1)) for _ in range(self._num_sensors)]
+    self._sensor_values = [
+      max(0, min(self._sensor_values[i] + offsets[i], 1023))
+      for i in range(self._num_sensors)
+    ]
+    return self._sensor_values.copy()
 
-class SerialHandler(object):
+  async def get_thresholds(self):
+    return self._sensor_values.copy()
+
+  async def update_threshold(self, index, threshold):
+      self._thresholds[index] = threshold
+      return self._thresholds.copy()
+  
+  async def update_thresholds(self, thresholds):
+    """
+    Update multiple thresholds. Return the new thresholds after the final update.
+    """
+    self._thresholds = thresholds.copy()
+    return self._thresholds.copy()
+
+class SyncSerialSender(object):
   """
-  A class to handle all the serial interactions.
+  Send and receive serial commands one line at at time.
+  """
 
-  Attributes:
-    ser: Serial, the serial object opened by this class.
+  def __init__(self, port, timeout=1):
+    """
     port: string, the path/name of the serial object to open.
     timeout: int, the time in seconds indicating the timeout for serial
       operations.
-  """
-  def __init__(self, port, timeout=1):
-    self.ser = None
-    self.port = port
-    self.timeout = timeout
+    """
+    self._ser = None
+    self._port = port
+    self._timeout = timeout
 
-  def Open(self):
-    self.ser = serial.Serial(self.port, 115200, timeout=self.timeout)
+  def open(self):
+    self._ser = serial.Serial(self._port, 115200, timeout=self._timeout)
 
-  def Close(self):
-    if self.ser and not self.ser.closed:
-      self.ser.close()
-    self.ser = None
+  def close(self):
+    if self._ser and not self._ser.closed:
+      self._ser.close()
+    self._ser = None
   
-  def isOpen(self):
-    return self.ser and self.ser.isOpen()
+  def is_open(self):
+    return self._ser and self._ser.isOpen()
 
-  def Send(self, command):
-    self.ser.write(command.encode())
+  def send(self, command):
+    self._ser.write(command.encode())
 
-    line = self.ser.readline().decode('ascii')
+    line = self._ser.readline().decode('ascii')
 
     if not line.endswith('\n'):
       raise SerialReadTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
     return line.strip()
 
-class FsrSerialHandler(object):
-  def __init__(self, serial_handler):
-    self.__serial_handler = serial_handler
+class SerialHandler(object):
+  def __init__(self, sync_serial_sender):
+    self._sync_serial_sender = sync_serial_sender
 
-  def Open(self):
-    self.__serial_handler.Open()
+  async def open(self):
+    self._sync_serial_sender.open()
   
-  def Close(self):
-    self.__serial_handler.Close()
+  def close(self):
+    self._sync_serial_sender.close()
   
-  def isOpen(self):
-    return self.__serial_handler.isOpen()
+  def is_open(self):
+    return self._sync_serial_sender.is_open()
 
   async def get_values(self):
-    response = await asyncio.to_thread(lambda: self.__serial_handler.Send('v\n'))
+    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('v\n'))
     # Expect current sensor values preceded by a 'v'.
     # v num1 num2 num3 num4
     parts = response.split()
@@ -207,7 +214,7 @@ class FsrSerialHandler(object):
     return [int(x) for x in parts[1:]]
 
   async def get_thresholds(self):
-    response = await asyncio.to_thread(lambda: self.__serial_handler.Send('t\n'))
+    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('t\n'))
     # Expect current thresholds preceded by a 't'.
     # t num1 num2 num3 num4
     parts = response.split()
@@ -217,7 +224,7 @@ class FsrSerialHandler(object):
 
   async def update_threshold(self, index, threshold):
     threshold_cmd = '%d %d\n' % (index, threshold)
-    response = await asyncio.to_thread(lambda: self.__serial_handler.Send(threshold_cmd))
+    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send(threshold_cmd))
     # Expect updated thresholds preceded by a 't'.
     # t num1 num2 num3 num4
     parts = response.split()
@@ -394,7 +401,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
 
   while True:
     try:
-      await asyncio.to_thread(lambda: serial_handler.Open())
+      await serial_handler.open()
       print('Serial connected')
       websocket_handler.serial_connected = True
       # Retrieve current thresholds on connect, and establish number of panels
@@ -437,7 +444,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
 
     except (serial.SerialException, SerialReadTimeoutError) as e:
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
-      serial_handler.Close()
+      serial_handler.close()
       logger.exception('Serial error: %s', e)
       websocket_handler.serial_connected = False
       defaults_handler.set_profile_handler(None)
@@ -456,9 +463,9 @@ def main():
   websocket_handler = WebSocketHandler()
 
   if NO_SERIAL:
-    serial_handler = FsrSerialHandler(FakeSerialHandler())
+    serial_handler = FakeSerialHandler(num_sensors=4)
   else:
-    serial_handler = FsrSerialHandler(SerialHandler(port=SERIAL_PORT, timeout=0.05))
+    serial_handler = SerialHandler(SyncSerialSender(port=SERIAL_PORT, timeout=0.05))
 
   async def on_startup(app):
     asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
