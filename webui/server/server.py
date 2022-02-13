@@ -283,7 +283,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
           elif action == 'change_profile':
             profile_name, = data[1:]
             await change_profile(profile_name)
-            websocket_handler.task_done()
+          websocket_handler.task_done()
           receive_json_task = asyncio.create_task(websocket_handler.receive_json())
   
   while True:
