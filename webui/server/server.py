@@ -144,7 +144,7 @@ class FakeSerialHandler(object):
 class CommandFormatError(Exception):
   pass
 
-class SerialTimeoutError(Exception):
+class SerialReadTimeoutError(Exception):
   pass
 
 class SerialHandler(object):
@@ -179,7 +179,7 @@ class SerialHandler(object):
     line = self.ser.readline().decode('ascii')
 
     if not line.endswith('\n'):
-      raise SerialTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
+      raise SerialReadTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
     return line.strip()
 
@@ -337,10 +337,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
             websocket_handler.task_done()
             receive_json_task = asyncio.create_task(websocket_handler.receive_json())
 
-    except SerialTimeoutError as e:
-      logger.exception('Serial timeout: %s', e)
-      continue
-    except serial.SerialException as e:
+    except (serial.SerialException, SerialReadTimeoutError) as e:
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
       serial_handler.Close()
       logger.exception('Serial error: %s', e)
