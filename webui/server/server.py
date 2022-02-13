@@ -130,6 +130,7 @@ class FakeSerialHandler(object):
   def close(self):
     self._is_open = False  
 
+  @property
   def is_open(self):
     return self._is_open
 
@@ -178,8 +179,9 @@ class SyncSerialSender(object):
       self._ser.close()
     self._ser = None
   
+  @property
   def is_open(self):
-    return self._ser and self._ser.isOpen()
+    return self._ser and self._ser.is_open
 
   def send(self, command):
     self._ser.write(command.encode())
@@ -201,8 +203,9 @@ class SerialHandler(object):
   def close(self):
     self._sync_serial_sender.close()
   
+  @property
   def is_open(self):
-    return self._sync_serial_sender.is_open()
+    return self._sync_serial_sender.is_open
 
   async def get_values(self):
     response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('v\n'))
@@ -290,6 +293,7 @@ class WebSocketHandler(object):
       for task in self._websocket_tasks:
         task.cancel()
   
+  @property
   def has_clients(self):
     return len(self._websockets) > 0
 
@@ -432,7 +436,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
         done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
         for task in done:
           if task == poll_values_task:
-            if websocket_handler.has_clients():
+            if websocket_handler.has_clients:
               values = await serial_handler.get_values()
               await websocket_handler.broadcast_values(values)
             poll_values_task = asyncio.create_task(asyncio.sleep(POLL_VALUES_WAIT_SECONDS))
