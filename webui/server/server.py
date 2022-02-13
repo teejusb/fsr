@@ -134,13 +134,13 @@ class FakeSerialHandler(object):
         max(0, min(self.__no_serial_values[i] + offsets[i], 1023))
         for i in range(self.__num_sensors)
       ]
-      return 'v', self.__no_serial_values.copy()
+      return 'v %s' % (' '.join(map(str, self.__no_serial_values)))
     elif command == 't\n':
-      return 't', self.__thresholds.copy()
+      return 't %s' % (' '.join(map(str, self.__thresholds)))
     elif "0123456789".find(command[0]) != -1:
       sensor_index = int(command[0])
       self.__thresholds[sensor_index] = int(command[1:])
-      return 't', self.__thresholds.copy()
+      return 't %s' % (' '.join(map(str, self.__thresholds)))
 
 class CommandFormatError(Exception):
   pass
@@ -182,32 +182,69 @@ class SerialHandler(object):
     if not line.endswith('\n'):
       raise SerialTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
-    line = line.strip()
+    return line.strip()
 
-    # All commands are of the form:
-    #   cmd num1 num2 num3 num4
-    parts = line.split()
-    # if len(parts) != num_sensors + 1:
-    #   raise CommandFormatError('Command response "{}" had length {}, expected length was {}'.format(line, len(parts), num_sensors + 1))
-    cmd = parts[0]
-    values = [int(x) for x in parts[1:]]
-    return cmd, values
+class FsrSerialHandler(object):
+  def __init__(self, serial_handler):
+    self.__serial_handler = serial_handler
+
+  def Open(self):
+    self.__serial_handler.Open()
+  
+  def Close(self):
+    self.__serial_handler.Close()
+  
+  def isOpen(self):
+    return self.__serial_handler.isOpen()
+
+  async def get_values(self):
+    response = await asyncio.to_thread(lambda: self.__serial_handler.Send('v\n'))
+    # Expect current sensor values preceded by a 'v'.
+    # v num1 num2 num3 num4
+    parts = response.split()
+    if parts[0] != 'v':
+      raise CommandFormatError('Expected values in response, got "{}"' % (response))
+    return [int(x) for x in parts[1:]]
+
+  async def get_thresholds(self):
+    response = await asyncio.to_thread(lambda: self.__serial_handler.Send('t\n'))
+    # Expect current thresholds preceded by a 't'.
+    # t num1 num2 num3 num4
+    parts = response.split()
+    if parts[0] != 't':
+      raise CommandFormatError('Expected thresholds in response, got "{}"' % (response))
+    return [int(x) for x in parts[1:]]  
+
+  async def update_threshold(self, index, threshold):
+    threshold_cmd = '%d %d\n' % (index, threshold)
+    response = await asyncio.to_thread(lambda: self.__serial_handler.Send(threshold_cmd))
+    # Expect updated thresholds preceded by a 't'.
+    # t num1 num2 num3 num4
+    parts = response.split()
+    if parts[0] != 't':
+      raise CommandFormatError('Expected thresholds in response, got "{}"' % (response))
+    return [int(x) for x in parts[1:]]
+  
+  async def update_thresholds(self, thresholds):
+    """
+    Update multiple thresholds. Return the new thresholds after the final update.
+    """
+    for index, threshold in enumerate(thresholds):
+      new_thresholds = await self.update_threshold(index, threshold)
+    return new_thresholds
 
 
 async def run_websockets(websocket_handler, serial_handler, defaults_handler):
   profile_handler = None
 
   async def update_threshold(values, index):
-    threshold_cmd = str(index) + ' ' + str(values[index]) + '\n'
-    t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
-    profile_handler.UpdateThreshold(index, thresholds[index])
+    thresholds = await serial_handler.update_threshold(index, values[index])
+    profile_handler.UpdateThresholds(thresholds)
     await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
 
   async def update_thresholds(values):
-    for index, value in enumerate(values):
-      threshold_cmd = str(index) + ' ' + str(value) + '\n'
-      t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send(threshold_cmd))
+    thresholds = await serial_handler.update_thresholds(values)
     profile_handler.UpdateThresholds(thresholds)
     await websocket_handler.send_json_all(['thresholds', {'thresholds': profile_handler.GetCurThresholds()}])
     print('Thresholds are: ' + str(profile_handler.GetCurThresholds()))
@@ -241,13 +278,6 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
     await websocket_handler.send_json_all(['get_cur_profile', {'cur_profile': profile_handler.GetCurrentProfile()}])
     print('Changed to profile "{}" with thresholds: {}'.format(
       profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
-
-  async def get_values():
-    try:
-      return await asyncio.to_thread(lambda: serial_handler.Send('v\n'))
-    except CommandFormatError as e:
-      logger.exception("Bad response from v command: %s", e)
-      sys.exit(1)
   
   async def report_values(values):
     await websocket_handler.send_json_all(['values', {'values': values}])
@@ -263,7 +293,7 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
       for task in done:
         if task == poll_values_task:
           if websocket_handler.has_clients():
-            v, values = await get_values()
+            values = await serial_handler.get_values()
             await report_values(values)
           poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
         if task == receive_json_task:
@@ -292,10 +322,10 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
       print('Serial connected')
       websocket_handler.serial_connected = True
       # Retrieve current thresholds on connect, and establish number of panels
-      t, thresholds = await asyncio.to_thread(lambda: serial_handler.Send('t\n'))
+      thresholds = await serial_handler.get_thresholds()
       profile_handler = ProfileHandler(num_sensors=len(thresholds))
 
-      # Load profiles
+      # Load saved profiles
       profile_handler.Load()
 
       # Send current thresholds from loaded profile, then write back from MCU to profiles.
@@ -412,9 +442,9 @@ def main():
   websocket_handler = WebSocketHandler()
 
   if NO_SERIAL:
-    serial_handler = FakeSerialHandler()
+    serial_handler = FsrSerialHandler(FakeSerialHandler())
   else:
-    serial_handler = SerialHandler(port=SERIAL_PORT, timeout=0.05)
+    serial_handler = FsrSerialHandler(SerialHandler(port=SERIAL_PORT, timeout=0.05))
 
   async def on_startup(app):
     asyncio.create_task(run_websockets(websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
