@@ -280,7 +280,6 @@ async def run_websockets(websocket_handler, serial_handler, defaults_handler):
 
   async def handle_client_message(data):
     action = data[0]
-
     if action == 'update_threshold':
       values, index = data[1:]
       await update_threshold(values, index)
