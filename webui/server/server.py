@@ -7,7 +7,7 @@ from collections import OrderedDict
 from random import normalvariate
 
 import serial
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSCloseCode, WSMsgType
 from aiohttp.web import json_response
 
 logger = logging.getLogger(__name__)
@@ -367,12 +367,9 @@ class WebSocketHandler(object):
     self._serial_connected = False
     # Queue to pass messages to main Task
     self._receive_queue = asyncio.Queue(maxsize=1)
-    # Used to coordinate updates to app['websockets'] set
-    self._websockets_lock = asyncio.Lock()
-    # Set of open websockets used to broadcast messages to all clients.
+    # Set of open websockets used to broadcast messages to all clients,
+    # and to close in case of errors or shutdown.
     self._websockets = set()
-    # Set of open websocket tasks to cancel when the app shuts down.
-    self._websocket_tasks = set()
 
   @property
   def serial_connected(self):
@@ -407,7 +404,7 @@ class WebSocketHandler(object):
     """
     Serialize msg as JSON and wait to send it to every connected client.
     """
-    # Iterate over copy of set in case the set is modified while awaiting a send
+    # Iterate over copy of set in case the set is modified while awaiting
     websockets = self._websockets.copy()
     for ws in websockets:
       if not ws.closed:
@@ -449,10 +446,21 @@ class WebSocketHandler(object):
     """
     await self.send_json_all(['get_cur_profile', {'cur_profile': cur_profile}])
 
-  async def cancel_ws_tasks(self):
-    async with self._websockets_lock:
-      for task in self._websocket_tasks:
-        task.cancel()
+  async def close_websockets(self, code=WSCloseCode.OK, message=b''):
+    """
+    Close all open websockets.
+
+    code and message arguments are passed to each close() call, see
+    https://docs.aiohttp.org/en/stable/web_reference.html#aiohttp.web.WebSocketResponse.close
+
+    Keyword arguments:
+    code -- closing code (default WSCloseCode.OK)
+    message -- optional payload of close message, str (converted to UTF-8 encoded bytes) or bytes.
+    """
+    # Iterate over copy of set in case the set is modified while awaiting
+    websockets = self._websockets.copy()
+    for ws in websockets:
+      await ws.close(code=code, message=message)
 
   @property
   def has_clients(self):
@@ -478,13 +486,10 @@ class WebSocketHandler(object):
     if not self.serial_connected:
       return json_response({}, status=503)
 
-    this_task = asyncio.current_task()
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-    async with self._websockets_lock:
-      self._websockets.add(ws)
-      self._websocket_tasks.add(this_task)
+    self._websockets.add(ws)
     print('Client connected')
 
     # Only the request handling task that opens a websocket is allowed to call
@@ -494,15 +499,13 @@ class WebSocketHandler(object):
     try:
       while not ws.closed:
         msg = await ws.receive()
-        if msg.type == WSMsgType.CLOSE:
+        if msg.type == WSMsgType.CLOSING:
           break
         elif msg.type == WSMsgType.TEXT:
           data = msg.json()
-        await self._receive_queue.put(data)
+          await self._receive_queue.put(data)
     finally:
-      async with self._websockets_lock:
-        self._websockets.remove(ws)
-        self._websocket_tasks.remove(this_task)
+      self._websockets.remove(ws)
       await ws.close()
       print('Client disconnected')
 
@@ -632,7 +635,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       logger.exception('Serial error: %s', e)
       websocket_handler.serial_connected = False
       defaults_handler.set_profile_handler(None)
-      await websocket_handler.cancel_ws_tasks()
+      await websocket_handler.close_websockets(code=WSCloseCode.INTERNAL_ERROR, message='Serial error')
       await asyncio.sleep(3)
 
 build_dir = os.path.abspath(
@@ -655,7 +658,7 @@ def main():
     asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
 
   async def on_shutdown(app):
-    await websocket_handler.cancel_ws_tasks()
+    await websocket_handler.close_websockets(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
 
   app = web.Application()
 
