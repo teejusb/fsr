@@ -31,14 +31,15 @@ class SerialReadTimeoutError(Exception):
 
 class ProfileHandler(object):
   """
-  A class to handle all the profile modifications.
-
-  Attributes:
-    filename: string, the filename where to read/write profile data.
-    profiles: OrderedDict, the profile data loaded from the file.
-    cur_profile: string, the name of the current active profile.
+  Track a list of profiles and which is the "current" one. Handle
+  saving and loading profiles from a text file.
   """
   def __init__(self, num_sensors, filename='profiles.txt'):
+    """
+    Keyword arguments:
+    num_sensors -- all profiles are expected to have this many sensors
+    filename -- relative path for file safe/load profiles (default 'profiles.txt')
+    """
     self._num_sensors = num_sensors
     self._filename = filename
     self._profiles = OrderedDict()
@@ -46,13 +47,25 @@ class ProfileHandler(object):
     # Have a default no-name profile we can use in case there are no profiles.
     self._profiles[''] = [0] * self._num_sensors
 
-  def _PersistProfiles(self):
+  def _AssertThresholdsLength(self, thresholds):
+    """Raise error if thresholds list is not the expected length."""
+    if not len(thresholds) == self._num_sensors:
+      raise ValueError('Expected {} threshold values, got {}'.format(self._num_sensors, thresholds))
+
+  def _Save(self):
+    """
+    Save profiles to file. The empty-name '' profile is always skipped.
+    """
     with open(self._filename, 'w') as f:
       for name, thresholds in self._profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
 
   def Load(self):
+    """
+    Load profiles from file if it exists, and change the to the first profile found.
+    If no profiles are found, do not change the current profile.
+    """
     num_profiles = 0
     if os.path.exists(self._filename):
       with open(self._filename, 'r') as f:
@@ -64,54 +77,83 @@ class ProfileHandler(object):
             # Change to the first profile found.
             if num_profiles == 1:
               self.ChangeProfile(parts[0])
-    else:
-      open(self._filename, 'w').close()
 
   def GetCurThresholds(self):
-    if not self._cur_profile in self._profiles:
-      raise RuntimeError("Current profile name is missing from profile list")
+    """Return thresholds of current profile."""
     return self._profiles[self._cur_profile]
 
   def UpdateThreshold(self, index, value):
-    if not self._cur_profile in self._profiles:
-      raise RuntimeError("Current profile name is missing from profile list")
+    """
+    Update one threshold in the current profile, and save profiles to file.
+    
+    Keyword arguments:
+    index -- threshold index to update
+    value -- new threshold value
+    """
     self._profiles[self._cur_profile][index] = value
-    self._PersistProfiles()
+    self._Save()
 
   def UpdateThresholds(self, values):
-    if not self._cur_profile in self._profiles:
-      raise RuntimeError("Current profile name is missing from profile list")
-    if not len(values) == len(self._profiles[self._cur_profile]):
-      raise RuntimeError('Expected {} threshold values, got {}'.format(len(self._profiles[self._cur_profile]), values))
+    """
+    Update all thresholds in the current profile, and save profiles to file.
+    The number of values must match the configured num_panels.
+    
+    Keyword arguments:
+    thresholds -- list of new threshold values
+    """
+    self._AssertThresholdsLength(values)
     self._profiles[self._cur_profile] = values.copy()
-    self._PersistProfiles()
+    self._Save()
 
   def ChangeProfile(self, profile_name):
-    if not profile_name in self._profiles:
-      print(profile_name, " not in ", self._profiles)
-      raise RuntimeError("Selected profile name is missing from profile list")
-    self._cur_profile = profile_name
+    """
+    Change to a profile. If there is no profile by that name,
+    remain on the current profile.
+    """
+    if profile_name in self._profiles:
+      self._cur_profile = profile_name
+    else:
+      print("Ignoring ChangeProfile, ", profile_name, " not in ", self._profiles)
 
   def GetProfileNames(self):
+    """
+    Return list of all profile names.
+    Does not include the empty-name '' profile.
+    """
     return [name for name in self._profiles.keys() if name]
 
   def AddProfile(self, profile_name, thresholds):
+    """
+    If the current profile is the empty-name '' profile, reset thresholds to defaults.
+    Add a profile, change to it, and save profiles to file.
+
+    Keyword arguments:
+    profile_name -- the name of the new profile
+    thresholds -- list of threshold values for the new profile
+    """
+    self._AssertThresholdsLength(thresholds)
     self._profiles[profile_name] = thresholds
     if self._cur_profile == '':
       self._profiles[''] = [0] * self._num_sensors
     self.ChangeProfile(profile_name)
-    self._PersistProfiles()
+    self._Save()
 
   def RemoveProfile(self, profile_name):
+    """
+    Delete a profile and save profiles to file.
+    Change to empty-name '' profile if deleted profile was the current profile.
+    Trying to delete an unknown profile will print a warning and do nothing.
+    """
     if not profile_name in self._profiles:
-      print(profile_name, " not in ", self._profiles)
-      raise RuntimeError("Selected profile name is missing from profile list")
+      print("No profile named ", profile_name, " to delete in ", self._profiles)
+      return
     del self._profiles[profile_name]
     if profile_name == self._cur_profile:
       self.ChangeProfile('')
-    self._PersistProfiles()
+    self._Save()
 
   def GetCurrentProfile(self):
+    """Return current profile name."""
     return self._cur_profile
 
 class FakeSerialHandler(object):
