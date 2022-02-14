@@ -3,7 +3,6 @@ import asyncio
 import logging
 import os
 import socket
-import sys
 from collections import OrderedDict
 from random import normalvariate
 
