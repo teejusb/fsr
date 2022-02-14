@@ -157,11 +157,19 @@ class ProfileHandler(object):
     return self._cur_profile
 
 class FakeSerialHandler(object):
+  """
+  Use in place of SerialHandler to test without a real serial device.
+  Stores and returns thresholds as requested.
+  Returns random sensor values on each read. The previous sensor values
+  influence the next read so the graph isn't too jumpy.
+  """
   def __init__(self, num_sensors):
+    """
+    Keyword arguments:
+    num_sensors -- return this many values and thresholds
+    """
     self._is_open = False
     self._num_sensors = num_sensors
-    # Use previous values when randomly generating sensor readings
-    # so graph isn't too jumpy.
     self._sensor_values = [0] * self._num_sensors
     self._thresholds = [0] * self._num_sensors
 
@@ -191,51 +199,90 @@ class FakeSerialHandler(object):
       return self._thresholds.copy()
   
   async def update_thresholds(self, thresholds):
-    """
-    Update multiple thresholds. Return the new thresholds after the final update.
-    """
-    self._thresholds = thresholds.copy()
+    for i, threshold in enumerate(thresholds):
+      self._thresholds[i] = threshold
     return self._thresholds.copy()
 
 class SyncSerialSender(object):
   """
   Send and receive serial commands one line at at time.
   """
-
-  def __init__(self, port, timeout=1):
+  def __init__(self, port, timeout=1.0):
     """
-    port: string, the path/name of the serial object to open.
-    timeout: int, the time in seconds indicating the timeout for serial
-      operations.
+    port -- string, the path/name of the serial object to open
+    timeout -- the time in seconds indicating the timeout for serial
+      operations (default 1.0)
     """
     self._ser = None
     self._port = port
     self._timeout = timeout
 
   def open(self):
+    """
+    Open a new Serial instance with configured port and timeout.
+    """
     self._ser = serial.Serial(self._port, 115200, timeout=self._timeout)
 
   def close(self):
+    """
+    Close the serial port if it is open.
+    Does nothing if port is already closed.
+    """
     if self._ser and not self._ser.closed:
       self._ser.close()
     self._ser = None
   
   @property
   def is_open(self):
+    "Return True if serial port is open, false otherwise."
     return self._ser and self._ser.is_open
 
   def send(self, command):
+    """
+    Write a command string, then read a response and return it as a string.
+
+    This does blocking IO, so don't call it directly from a coroutine.
+
+    Command and response are both expected to end with a newline character.
+    `send` does not add a newline to `command`. It does strip the newline from
+    the response.
+
+    Raises SerialReadTimeoutError if there is no response before the configured
+    timeout.
+
+    Keyword arguments:
+    command -- string to write to serial port
+    """
     self._ser.write(command.encode())
 
     line = self._ser.readline().decode('ascii')
 
+    # If readline does not find a newline character before the Serial
+    # instance's configured timeout, it will return whatever it has
+    # read so far. PySerial does not throw an exception, but we will.
     if not line.endswith('\n'):
       raise SerialReadTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
 
     return line.strip()
 
 class SerialHandler(object):
+  """
+  Handle communication with the serial device.
+
+  Provide async wrappers and command parsing on top of
+  SyncSerialSender's blocking string-based IO.
+
+  Blocking IO is run in a thread pool using an asyncio helper. However, only
+  one coroutine is expected to be sending commands, one command at a time.
+  There is only one underlying hardware device, so any command needs to wait
+  for the previous command and response to be processed.
+  """
   def __init__(self, sync_serial_sender):
+    """
+    Keyword arguments:
+    sync_serial_sender -- SyncSerialSender instance to perform blocking reads
+      and writes of command strings
+    """
     self._sync_serial_sender = sync_serial_sender
 
   async def open(self):
@@ -249,6 +296,9 @@ class SerialHandler(object):
     return self._sync_serial_sender.is_open
 
   async def get_values(self):
+    """
+    Read current sensor values from serial device and return as a list of ints.
+    """
     response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('v\n'))
     # Expect current sensor values preceded by a 'v'.
     # v num1 num2 num3 num4
@@ -258,6 +308,9 @@ class SerialHandler(object):
     return [int(x) for x in parts[1:]]
 
   async def get_thresholds(self):
+    """
+    Read current threshold values from serial device and return as a list of ints.
+    """
     response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('t\n'))
     # Expect current thresholds preceded by a 't'.
     # t num1 num2 num3 num4
@@ -267,6 +320,14 @@ class SerialHandler(object):
     return [int(x) for x in parts[1:]]  
 
   async def update_threshold(self, index, threshold):
+    """
+    Write a single threshold update command.
+    Read all current threshold values from serial device and return as a list of ints.
+
+    Keyword arguments:
+    index -- index starting from 0 of the threshold to update
+    threshold -- new threshold value
+    """
     threshold_cmd = '%d %d\n' % (index, threshold)
     response = await asyncio.to_thread(lambda: self._sync_serial_sender.send(threshold_cmd))
     # Expect updated thresholds preceded by a 't'.
@@ -278,7 +339,15 @@ class SerialHandler(object):
   
   async def update_thresholds(self, thresholds):
     """
-    Update multiple thresholds. Return the new thresholds after the final update.
+    Send a series of commands to the serial device to update all thresholds,
+    one at a time.
+    Read all current threshold values from serial device after final update
+    and return as a list of ints.
+
+    Keyword arguments:
+    thresholds -- list of thresholds as ints to update. The index of the list
+      maps to the index of the thresholds, so index 0 will update threshold 0
+      and so on
     """
     for index, threshold in enumerate(thresholds):
       new_thresholds = await self.update_threshold(index, threshold)
