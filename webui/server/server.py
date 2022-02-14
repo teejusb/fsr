@@ -39,80 +39,80 @@ class ProfileHandler(object):
     cur_profile: string, the name of the current active profile.
   """
   def __init__(self, num_sensors, filename='profiles.txt'):
-    self.num_sensors = num_sensors
-    self.filename = filename
-    self.profiles = OrderedDict()
-    self.cur_profile = ''
+    self._num_sensors = num_sensors
+    self._filename = filename
+    self._profiles = OrderedDict()
+    self._cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = [0] * self.num_sensors
+    self._profiles[''] = [0] * self._num_sensors
 
   def _PersistProfiles(self):
-    with open(self.filename, 'w') as f:
-      for name, thresholds in self.profiles.items():
+    with open(self._filename, 'w') as f:
+      for name, thresholds in self._profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
 
   def Load(self):
     num_profiles = 0
-    if os.path.exists(self.filename):
-      with open(self.filename, 'r') as f:
+    if os.path.exists(self._filename):
+      with open(self._filename, 'r') as f:
         for line in f:
           parts = line.split()
-          if len(parts) == (self.num_sensors + 1):
-            self.profiles[parts[0]] = [int(x) for x in parts[1:]]
+          if len(parts) == (self._num_sensors + 1):
+            self._profiles[parts[0]] = [int(x) for x in parts[1:]]
             num_profiles += 1
             # Change to the first profile found.
             if num_profiles == 1:
               self.ChangeProfile(parts[0])
     else:
-      open(self.filename, 'w').close()
+      open(self._filename, 'w').close()
 
   def GetCurThresholds(self):
-    if not self.cur_profile in self.profiles:
+    if not self._cur_profile in self._profiles:
       raise RuntimeError("Current profile name is missing from profile list")
-    return self.profiles[self.cur_profile]
+    return self._profiles[self._cur_profile]
 
   def UpdateThreshold(self, index, value):
-    if not self.cur_profile in self.profiles:
+    if not self._cur_profile in self._profiles:
       raise RuntimeError("Current profile name is missing from profile list")
-    self.profiles[self.cur_profile][index] = value
+    self._profiles[self._cur_profile][index] = value
     self._PersistProfiles()
 
   def UpdateThresholds(self, values):
-    if not self.cur_profile in self.profiles:
+    if not self._cur_profile in self._profiles:
       raise RuntimeError("Current profile name is missing from profile list")
-    if not len(values) == len(self.profiles[self.cur_profile]):
-      raise RuntimeError('Expected {} threshold values, got {}'.format(len(self.profiles[self.cur_profile]), values))
-    self.profiles[self.cur_profile] = values.copy()
+    if not len(values) == len(self._profiles[self._cur_profile]):
+      raise RuntimeError('Expected {} threshold values, got {}'.format(len(self._profiles[self._cur_profile]), values))
+    self._profiles[self._cur_profile] = values.copy()
     self._PersistProfiles()
 
   def ChangeProfile(self, profile_name):
-    if not profile_name in self.profiles:
-      print(profile_name, " not in ", self.profiles)
+    if not profile_name in self._profiles:
+      print(profile_name, " not in ", self._profiles)
       raise RuntimeError("Selected profile name is missing from profile list")
-    self.cur_profile = profile_name
+    self._cur_profile = profile_name
 
   def GetProfileNames(self):
-    return [name for name in self.profiles.keys() if name]
+    return [name for name in self._profiles.keys() if name]
 
   def AddProfile(self, profile_name, thresholds):
-    self.profiles[profile_name] = thresholds
-    if self.cur_profile == '':
-      self.profiles[''] = [0] * self.num_sensors
+    self._profiles[profile_name] = thresholds
+    if self._cur_profile == '':
+      self._profiles[''] = [0] * self._num_sensors
     self.ChangeProfile(profile_name)
     self._PersistProfiles()
 
   def RemoveProfile(self, profile_name):
-    if not profile_name in self.profiles:
-      print(profile_name, " not in ", self.profiles)
+    if not profile_name in self._profiles:
+      print(profile_name, " not in ", self._profiles)
       raise RuntimeError("Selected profile name is missing from profile list")
-    del self.profiles[profile_name]
-    if profile_name == self.cur_profile:
+    del self._profiles[profile_name]
+    if profile_name == self._cur_profile:
       self.ChangeProfile('')
     self._PersistProfiles()
 
   def GetCurrentProfile(self):
-    return self.cur_profile
+    return self._cur_profile
 
 class FakeSerialHandler(object):
   def __init__(self, num_sensors):
