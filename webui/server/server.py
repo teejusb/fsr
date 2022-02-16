@@ -51,12 +51,12 @@ class ProfileHandler(object):
     # Have a default no-name profile we can use in case there are no profiles.
     self._profiles[''] = [0] * self._num_sensors
 
-  def _AssertThresholdsLength(self, thresholds):
+  def _assert_thresholds_length(self, thresholds):
     """Raise error if thresholds list is not the expected length."""
     if not len(thresholds) == self._num_sensors:
       raise ValueError('Expected {} threshold values, got {}'.format(self._num_sensors, thresholds))
 
-  def _Save(self):
+  def _save(self):
     """
     Save profiles to file. The empty-name '' profile is always skipped.
     """
@@ -65,7 +65,7 @@ class ProfileHandler(object):
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
 
-  def Load(self):
+  def load(self):
     """
     Load profiles from file if it exists, and change the to the first profile found.
     If no profiles are found, do not change the current profile.
@@ -80,13 +80,13 @@ class ProfileHandler(object):
             num_profiles += 1
             # Change to the first profile found.
             if num_profiles == 1:
-              self.ChangeProfile(parts[0])
+              self.change_profile(parts[0])
 
-  def GetCurThresholds(self):
+  def get_cur_thresholds(self):
     """Return thresholds of current profile."""
     return self._profiles[self._cur_profile]
 
-  def UpdateThreshold(self, index, value):
+  def update_threshold(self, index, value):
     """
     Update one threshold in the current profile, and save profiles to file.
     
@@ -95,9 +95,9 @@ class ProfileHandler(object):
     value -- new threshold value
     """
     self._profiles[self._cur_profile][index] = value
-    self._Save()
+    self._save()
 
-  def UpdateThresholds(self, values):
+  def update_thresholds(self, values):
     """
     Update all thresholds in the current profile, and save profiles to file.
     The number of values must match the configured num_panels.
@@ -105,11 +105,11 @@ class ProfileHandler(object):
     Keyword arguments:
     thresholds -- list of new threshold values
     """
-    self._AssertThresholdsLength(values)
+    self._assert_thresholds_length(values)
     self._profiles[self._cur_profile] = values.copy()
-    self._Save()
+    self._save()
 
-  def ChangeProfile(self, profile_name):
+  def change_profile(self, profile_name):
     """
     Change to a profile. If there is no profile by that name,
     remain on the current profile.
@@ -119,14 +119,14 @@ class ProfileHandler(object):
     else:
       print("Ignoring ChangeProfile, ", profile_name, " not in ", self._profiles)
 
-  def GetProfileNames(self):
+  def get_profile_names(self):
     """
     Return list of all profile names.
     Does not include the empty-name '' profile.
     """
     return [name for name in self._profiles.keys() if name]
 
-  def AddProfile(self, profile_name, thresholds):
+  def add_profile(self, profile_name, thresholds):
     """
     If the current profile is the empty-name '' profile, reset thresholds to defaults.
     Add a profile, change to it, and save profiles to file.
@@ -135,14 +135,14 @@ class ProfileHandler(object):
     profile_name -- the name of the new profile
     thresholds -- list of threshold values for the new profile
     """
-    self._AssertThresholdsLength(thresholds)
+    self._assert_thresholds_length(thresholds)
     self._profiles[profile_name] = thresholds
     if self._cur_profile == '':
       self._profiles[''] = [0] * self._num_sensors
-    self.ChangeProfile(profile_name)
-    self._Save()
+    self.change_profile(profile_name)
+    self._save()
 
-  def RemoveProfile(self, profile_name):
+  def remove_profile(self, profile_name):
     """
     Delete a profile and save profiles to file.
     Change to empty-name '' profile if deleted profile was the current profile.
@@ -153,10 +153,10 @@ class ProfileHandler(object):
       return
     del self._profiles[profile_name]
     if profile_name == self._cur_profile:
-      self.ChangeProfile('')
-    self._Save()
+      self.change_profile('')
+    self._save()
 
-  def GetCurrentProfile(self):
+  def get_current_profile(self):
     """Return current profile name."""
     return self._cur_profile
 
@@ -535,9 +535,9 @@ class DefaultsHandler(object):
     """
     if self._profile_handler:
       return json_response({
-        'profiles': self._profile_handler.GetProfileNames(),
-        'cur_profile': self._profile_handler.GetCurrentProfile(),
-        'thresholds': self._profile_handler.GetCurThresholds()
+        'profiles': self._profile_handler.get_profile_names(),
+        'cur_profile': self._profile_handler.get_current_profile(),
+        'thresholds': self._profile_handler.get_cur_thresholds()
       })
     else:
       return json_response({}, status=503)
@@ -563,45 +563,45 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
 
   async def update_threshold(values, index):
     thresholds = await serial_handler.update_threshold(index, values[index])
-    profile_handler.UpdateThresholds(thresholds)
-    await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
+    profile_handler.update_thresholds(thresholds)
+    await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
     print('Profile is "{}". Thresholds are: {}'.format(
-      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
-    profile_handler.UpdateThresholds(thresholds)
-    await websocket_handler.broadcast_thresholds(profile_handler.GetCurThresholds())
+    profile_handler.update_thresholds(thresholds)
+    await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
     print('Profile is "{}". Thresholds are: {}'.format(
-      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
 
   async def add_profile(profile_name, thresholds):
-    profile_handler.AddProfile(profile_name, thresholds)
+    profile_handler.add_profile(profile_name, thresholds)
     # When we add a profile, we are using the currently loaded thresholds so we
     # don't need to explicitly apply anything.
-    await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
-    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
+    await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
+    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
     print('Changed to new profile "{}". Thresholds are: {}'.format(
-      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
 
   async def remove_profile(profile_name):
-    profile_handler.RemoveProfile(profile_name)
+    profile_handler.remove_profile(profile_name)
     # Need to apply the thresholds of the profile we've fallen back to.
-    thresholds = profile_handler.GetCurThresholds()
+    thresholds = profile_handler.get_cur_thresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.broadcast_profiles(profile_handler.GetProfileNames())
-    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
+    await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
+    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
     print('Removed profile "{}". Profile is "{}". Thresholds are: {}'.format(
-      profile_name, profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+      profile_name, profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
 
   async def change_profile(profile_name):
-    profile_handler.ChangeProfile(profile_name)
+    profile_handler.change_profile(profile_name)
     # Need to apply the thresholds of the profile we've changed to.
-    thresholds = profile_handler.GetCurThresholds()
+    thresholds = profile_handler.get_cur_thresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.broadcast_cur_profile(profile_handler.GetCurrentProfile())
+    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
     print('Changed to profile "{}". Thresholds are: {}'.format(
-      profile_handler.GetCurrentProfile(), str(profile_handler.GetCurThresholds())))
+      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
 
   async def handle_client_message(data):
     action = data[0]
@@ -628,24 +628,24 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       profile_handler = ProfileHandler(num_sensors=len(thresholds))
 
       # Load saved profiles
-      profile_handler.Load()
-      print('Found Profiles: ' + str(list(profile_handler.GetProfileNames())))
+      profile_handler.load()
+      print('Found Profiles: ' + str(list(profile_handler.get_profile_names())))
 
       # Send current thresholds from loaded profile, then write back from MCU to profiles.
-      thresholds = profile_handler.GetCurThresholds()
+      thresholds = profile_handler.get_cur_thresholds()
       thresholds = await serial_handler.update_thresholds(thresholds)
-      profile_handler.UpdateThresholds(thresholds)
+      profile_handler.update_thresholds(thresholds)
       print('Profile is "{}". Thresholds are: {}'.format(
-        profile_handler.GetCurrentProfile(), profile_handler.GetCurThresholds()))
+        profile_handler.get_current_profile(), profile_handler.get_cur_thresholds()))
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
       
       # Minimum delay in seconds to wait betwen getting current sensor values
-      POLL_VALUES_WAIT_SECONDS = 1.0 / 100
+      poll_values_wait_seconds = 1.0 / 100
 
       # Poll sensor values and handle client message
-      poll_values_task = asyncio.create_task(asyncio.sleep(POLL_VALUES_WAIT_SECONDS))
+      poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
       receive_json_task = asyncio.create_task(websocket_handler.receive_json())
       while True:
         done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
@@ -654,7 +654,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
             if websocket_handler.has_clients:
               values = await serial_handler.get_values()
               await websocket_handler.broadcast_values(values)
-            poll_values_task = asyncio.create_task(asyncio.sleep(POLL_VALUES_WAIT_SECONDS))
+            poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
           if task == receive_json_task:
             data = await task
             await handle_client_message(data)
