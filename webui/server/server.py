@@ -46,7 +46,8 @@ class ProfileHandler(object):
     """
     Keyword arguments:
     num_sensors -- all profiles are expected to have this many sensors
-    filename -- relative path for file safe/load profiles (default 'profiles.txt')
+    filename -- relative path for file safe/load profiles
+      (default 'profiles.txt')
     """
     self._num_sensors = num_sensors
     self._filename = filename
@@ -72,8 +73,8 @@ class ProfileHandler(object):
 
   def load(self):
     """
-    Load profiles from file if it exists, and change the to the first profile found.
-    If no profiles are found, do not change the current profile.
+    Load profiles from file if it exists, and change the to the first profile
+    found. If no profiles are found, do not change the current profile.
     """
     num_profiles = 0
     if os.path.exists(self._filename):
@@ -94,7 +95,7 @@ class ProfileHandler(object):
   def update_threshold(self, index, value):
     """
     Update one threshold in the current profile, and save profiles to file.
-    
+
     Keyword arguments:
     index -- threshold index to update
     value -- new threshold value
@@ -106,7 +107,7 @@ class ProfileHandler(object):
     """
     Update all thresholds in the current profile, and save profiles to file.
     The number of values must match the configured num_panels.
-    
+
     Keyword arguments:
     thresholds -- list of new threshold values
     """
@@ -134,8 +135,8 @@ class ProfileHandler(object):
 
   def add_profile(self, profile_name, thresholds):
     """
-    If the current profile is the empty-name '' profile, reset thresholds to defaults.
-    Add a profile, change to it, and save profiles to file.
+    If the current profile is the empty-name '' profile, reset thresholds to
+    defaults. Add a profile, change to it, and save profiles to file.
 
     Keyword arguments:
     profile_name -- the name of the new profile
@@ -330,7 +331,8 @@ class SerialHandler(object):
 
   async def get_thresholds(self):
     """
-    Read current threshold values from serial device and return as a list of ints.
+    Read current threshold values from serial device and return as a list of
+    ints.
     """
     response = await asyncio.to_thread(
         lambda: self._sync_serial_sender.send('t\n'))
@@ -345,7 +347,8 @@ class SerialHandler(object):
   async def update_threshold(self, index, threshold):
     """
     Write a single threshold update command.
-    Read all current threshold values from serial device and return as a list of ints.
+    Read all current threshold values from serial device and return as a list of
+    ints.
 
     Keyword arguments:
     index -- index starting from 0 of the threshold to update
@@ -440,7 +443,7 @@ class WebSocketHandler(object):
   async def broadcast_thresholds(self, thresholds):
     """
     Send current thresholds to all connected clients
-    
+
     Keyword arguments:
     thresholds -- threshold values as list of ints
     """
@@ -482,7 +485,8 @@ class WebSocketHandler(object):
 
     Keyword arguments:
     code -- closing code (default WSCloseCode.OK)
-    message -- optional payload of close message, str (converted to UTF-8 encoded bytes) or bytes.
+    message -- optional payload of close message, str (converted to UTF-8
+      encoded bytes) or bytes.
     """
     # Iterate over copy of set in case the set is modified while awaiting
     websockets = self._websockets.copy()
@@ -584,14 +588,14 @@ async def run_main_task_loop(websocket_handler, serial_handler,
   Disconnect clients and retry serial connection in case of serial errors.
 
   Keyword arguments:
-    websocket_handler -- Should be the same instance that the aiohttp server is using
-      handle requests. Used for receiving messages from any client and broadcasting
-      messages to all clients.
-    serial_handler -- Preconfigured with port and timeout, not expected to be open
-      initially.
-    defaults_handler -- Should be the same instance that the aiohttp server is using
-      to handle requests. The main task loop creates a ProfileHandler instance and
-      shares it with defaults_handler when it's ready.
+    websocket_handler -- Should be the same instance that the aiohttp server is
+      using handle requests. Used for receiving messages from any client and
+      broadcasting messages to all clients.
+    serial_handler -- Preconfigured with port and timeout, not expected to be
+      open initially.
+    defaults_handler -- Should be the same instance that the aiohttp server is
+      using to handle requests. The main task loop creates a ProfileHandler
+      instance and shares it with defaults_handler when it's ready.
   """
   profile_handler = None
 
@@ -600,18 +604,16 @@ async def run_main_task_loop(websocket_handler, serial_handler,
     profile_handler.update_thresholds(thresholds)
     await websocket_handler.broadcast_thresholds(
         profile_handler.get_cur_thresholds())
-    print(
-        f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
-    )
+    print(f'Profile is "{profile_handler.get_current_profile()}".',
+          f'Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
     profile_handler.update_thresholds(thresholds)
     await websocket_handler.broadcast_thresholds(
         profile_handler.get_cur_thresholds())
-    print(
-        f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
-    )
+    print(f'Profile is "{profile_handler.get_current_profile()}".',
+          f'Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def add_profile(profile_name, thresholds):
     profile_handler.add_profile(profile_name, thresholds)
@@ -621,9 +623,8 @@ async def run_main_task_loop(websocket_handler, serial_handler,
         profile_handler.get_profile_names())
     await websocket_handler.broadcast_cur_profile(
         profile_handler.get_current_profile())
-    print(
-        f'Changed to new profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
-    )
+    print(f'Changed to new profile "{profile_handler.get_current_profile()}".',
+          f'Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def remove_profile(profile_name):
     profile_handler.remove_profile(profile_name)
@@ -634,9 +635,9 @@ async def run_main_task_loop(websocket_handler, serial_handler,
         profile_handler.get_profile_names())
     await websocket_handler.broadcast_cur_profile(
         profile_handler.get_current_profile())
-    print(
-        f'Removed profile "{profile_name}". Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
-    )
+    print(f'Removed profile "{profile_name}".',
+          f'Profile is "{profile_handler.get_current_profile()}".',
+          f'Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def change_profile(profile_name):
     profile_handler.change_profile(profile_name)
@@ -645,9 +646,8 @@ async def run_main_task_loop(websocket_handler, serial_handler,
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_cur_profile(
         profile_handler.get_current_profile())
-    print(
-        f'Changed to profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
-    )
+    print(f'Changed to profile "{profile_handler.get_current_profile()}".',
+          f'Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def handle_client_message(data):
     action = data[0]
@@ -677,13 +677,13 @@ async def run_main_task_loop(websocket_handler, serial_handler,
       profile_handler.load()
       print('Found Profiles: ' + str(list(profile_handler.get_profile_names())))
 
-      # Send current thresholds from loaded profile, then write back from MCU to profiles.
+      # Send current thresholds from loaded profile, then write back from MCU
+      # to profiles.
       thresholds = profile_handler.get_cur_thresholds()
       thresholds = await serial_handler.update_thresholds(thresholds)
       profile_handler.update_thresholds(thresholds)
-      print(
-          f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {profile_handler.get_cur_thresholds()}'
-      )
+      print(f'Profile is "{profile_handler.get_current_profile()}".',
+            f'Thresholds are: {profile_handler.get_cur_thresholds()}')
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
@@ -713,7 +713,8 @@ async def run_main_task_loop(websocket_handler, serial_handler,
                 websocket_handler.receive_json())
 
     except (serial.SerialException, SerialReadTimeoutError) as e:
-      # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
+      # In case of serial error, disconnect all clients. The WebUI will try to
+      # reconnect.
       serial_handler.close()
       logger.exception('Serial error: %s', e)
       websocket_handler.serial_connected = False
