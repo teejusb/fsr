@@ -650,16 +650,13 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       await websocket_handler.close_websockets(code=WSCloseCode.INTERNAL_ERROR, message='Serial error')
       await asyncio.sleep(3)
 
-build_dir = os.path.abspath(
-  os.path.join(os.path.dirname(__file__), '..', 'build')
-)
-
-async def get_index(request):
-  return web.FileResponse(os.path.join(build_dir, 'index.html'))
-
 def main():
   defaults_handler = DefaultsHandler()
   websocket_handler = WebSocketHandler()
+
+  build_dir = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', 'build')
+  )
 
   if NO_SERIAL:
     serial_handler = FakeSerialHandler(num_sensors=4)
@@ -667,13 +664,17 @@ def main():
     serial_handler = SerialHandler(SyncSerialSender(port=SERIAL_PORT, timeout=0.05))
 
   async def on_startup(app):
-    asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler, serial_handler=serial_handler, defaults_handler=defaults_handler))
+    asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler,
+                                           serial_handler=serial_handler,
+                                           defaults_handler=defaults_handler))
 
   async def on_shutdown(app):
     await websocket_handler.close_websockets(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
 
-  app = web.Application()
+  async def get_index(request):
+    return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
+  app = web.Application()
   app.add_routes([
     web.get('/defaults', defaults_handler.handle_defaults),
     web.get('/ws', websocket_handler.handle_ws),
