@@ -543,6 +543,22 @@ class DefaultsHandler(object):
       return json_response({}, status=503)
 
 async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler):
+  """
+  Connect to a serial device and poll it for sensor values.
+  Handle incoming commands from WebUI clients.
+
+  Disconnect clients and retry serial connection in case of serial errors.
+
+  Keyword arguments:
+    websocket_handler -- Should be the same instance that the aiohttp server is using
+      handle requests. Used for receiving messages from any client and broadcasting
+      messages to all clients.
+    serial_handler -- Preconfigured with port and timeout, not expected to be open
+      initially.
+    defaults_handler -- Should be the same instance that the aiohttp server is using
+      to handle requests. The main task loop creates a ProfileHandler instance and
+      shares it with defaults_handler when it's ready.
+  """
   profile_handler = None
 
   async def update_threshold(values, index):
@@ -655,6 +671,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       await asyncio.sleep(3)
 
 def main():
+  """Set up and run the http server."""
   defaults_handler = DefaultsHandler()
   websocket_handler = WebSocketHandler()
 
