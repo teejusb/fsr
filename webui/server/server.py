@@ -24,8 +24,10 @@ NO_SERIAL = False
 # If False, only serve the websocket and JSON endpoints.
 SERVE_STATIC_FRONTEND_FILES = True
 
+
 class CommandFormatError(Exception):
   """Serial responded but command was not in the expected format."""
+
 
 class SerialReadTimeoutError(Exception):
   """
@@ -33,11 +35,13 @@ class SerialReadTimeoutError(Exception):
   presumably because read operation timed out before receiving one.
   """
 
+
 class ProfileHandler(object):
   """
   Track a list of profiles and which is the "current" one. Handle
   saving and loading profiles from a text file.
   """
+
   def __init__(self, num_sensors, filename='profiles.txt'):
     """
     Keyword arguments:
@@ -54,7 +58,8 @@ class ProfileHandler(object):
   def _assert_thresholds_length(self, thresholds):
     """Raise error if thresholds list is not the expected length."""
     if not len(thresholds) == self._num_sensors:
-      raise ValueError(f'Expected {self._num_sensors} threshold values, got {thresholds}')
+      raise ValueError(
+          f'Expected {self._num_sensors} threshold values, got {thresholds}')
 
   def _save(self):
     """
@@ -117,7 +122,8 @@ class ProfileHandler(object):
     if profile_name in self._profiles:
       self._cur_profile = profile_name
     else:
-      print('Ignoring ChangeProfile, ', profile_name, ' not in ', self._profiles)
+      print('Ignoring ChangeProfile, ', profile_name, ' not in ',
+            self._profiles)
 
   def get_profile_names(self):
     """
@@ -160,6 +166,7 @@ class ProfileHandler(object):
     """Return current profile name."""
     return self._cur_profile
 
+
 class FakeSerialHandler(object):
   """
   Use in place of SerialHandler to test without a real serial device.
@@ -167,6 +174,7 @@ class FakeSerialHandler(object):
   Returns random sensor values on each read. The previous sensor values
   influence the next read so the graph isn't too jumpy.
   """
+
   def __init__(self, num_sensors):
     """
     Keyword arguments:
@@ -181,17 +189,20 @@ class FakeSerialHandler(object):
     self._is_open = True
 
   def close(self):
-    self._is_open = False  
+    self._is_open = False
 
   @property
   def is_open(self):
     return self._is_open
 
   async def get_values(self):
-    offsets = [int(normalvariate(0, self._num_sensors + 1)) for _ in range(self._num_sensors)]
+    offsets = [
+        int(normalvariate(0, self._num_sensors + 1))
+        for _ in range(self._num_sensors)
+    ]
     self._sensor_values = [
-      max(0, min(self._sensor_values[i] + offsets[i], 1023))
-      for i in range(self._num_sensors)
+        max(0, min(self._sensor_values[i] + offsets[i], 1023))
+        for i in range(self._num_sensors)
     ]
     return self._sensor_values.copy()
 
@@ -199,18 +210,20 @@ class FakeSerialHandler(object):
     return self._sensor_values.copy()
 
   async def update_threshold(self, index, threshold):
-      self._thresholds[index] = threshold
-      return self._thresholds.copy()
-  
+    self._thresholds[index] = threshold
+    return self._thresholds.copy()
+
   async def update_thresholds(self, thresholds):
     for i, threshold in enumerate(thresholds):
       self._thresholds[i] = threshold
     return self._thresholds.copy()
 
+
 class SyncSerialSender(object):
   """
   Send and receive serial commands one line at at time.
   """
+
   def __init__(self, port, timeout=1.0):
     """
     port -- string, the path/name of the serial object to open
@@ -235,7 +248,7 @@ class SyncSerialSender(object):
     if self._ser and not self._ser.closed:
       self._ser.close()
     self._ser = None
-  
+
   @property
   def is_open(self):
     """Return True if serial port is open, false otherwise."""
@@ -265,9 +278,11 @@ class SyncSerialSender(object):
     # instance's configured timeout, it will return whatever it has
     # read so far. PySerial does not throw an exception, but we will.
     if not line.endswith('\n'):
-      raise SerialReadTimeoutError(f'Timeout reading response to command. {command} {line}')
+      raise SerialReadTimeoutError(
+          f'Timeout reading response to command. {command} {line}')
 
     return line.strip()
+
 
 class SerialHandler(object):
   """
@@ -281,6 +296,7 @@ class SerialHandler(object):
   There is only one underlying hardware device, so any command needs to wait
   for the previous command and response to be processed.
   """
+
   def __init__(self, sync_serial_sender):
     """
     Keyword arguments:
@@ -291,10 +307,10 @@ class SerialHandler(object):
 
   async def open(self):
     self._sync_serial_sender.open()
-  
+
   def close(self):
     self._sync_serial_sender.close()
-  
+
   @property
   def is_open(self):
     return self._sync_serial_sender.is_open
@@ -303,7 +319,8 @@ class SerialHandler(object):
     """
     Read current sensor values from serial device and return as a list of ints.
     """
-    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('v\n'))
+    response = await asyncio.to_thread(
+        lambda: self._sync_serial_sender.send('v\n'))
     # Expect current sensor values preceded by a 'v'.
     # v num1 num2 num3 num4
     parts = response.split()
@@ -315,13 +332,15 @@ class SerialHandler(object):
     """
     Read current threshold values from serial device and return as a list of ints.
     """
-    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send('t\n'))
+    response = await asyncio.to_thread(
+        lambda: self._sync_serial_sender.send('t\n'))
     # Expect current thresholds preceded by a 't'.
     # t num1 num2 num3 num4
     parts = response.split()
     if parts[0] != 't':
-      raise CommandFormatError(f'Expected thresholds in response, got "{response}"')
-    return [int(x) for x in parts[1:]]  
+      raise CommandFormatError(
+          f'Expected thresholds in response, got "{response}"')
+    return [int(x) for x in parts[1:]]
 
   async def update_threshold(self, index, threshold):
     """
@@ -333,14 +352,16 @@ class SerialHandler(object):
     threshold -- new threshold value
     """
     threshold_cmd = f'{index} {threshold}\n'
-    response = await asyncio.to_thread(lambda: self._sync_serial_sender.send(threshold_cmd))
+    response = await asyncio.to_thread(
+        lambda: self._sync_serial_sender.send(threshold_cmd))
     # Expect updated thresholds preceded by a 't'.
     # t num1 num2 num3 num4
     parts = response.split()
     if parts[0] != 't':
-      raise CommandFormatError(f'Expected thresholds in response, got "{response}"')
+      raise CommandFormatError(
+          f'Expected thresholds in response, got "{response}"')
     return [int(x) for x in parts[1:]]
-  
+
   async def update_thresholds(self, thresholds):
     """
     Send a series of commands to the serial device to update all thresholds,
@@ -357,6 +378,7 @@ class SerialHandler(object):
       new_thresholds = await self.update_threshold(index, threshold)
     return new_thresholds
 
+
 class WebSocketHandler(object):
   """
   Handle websocket connections to communicate with the WebUI.
@@ -366,6 +388,7 @@ class WebSocketHandler(object):
   client are placed in the same single queue, and outgoing messages
   are sent to every connected client.
   """
+
   def __init__(self):
     # Set when connecting or disconnecting serial device.
     self._serial_connected = False
@@ -378,7 +401,7 @@ class WebSocketHandler(object):
   @property
   def serial_connected(self):
     return self._serial_connected
-  
+
   @serial_connected.setter
   def serial_connected(self, serial_connected):
     """
@@ -413,7 +436,7 @@ class WebSocketHandler(object):
     for ws in websockets:
       if not ws.closed:
         await ws.send_json(msg)
-  
+
   async def broadcast_thresholds(self, thresholds):
     """
     Send current thresholds to all connected clients
@@ -422,7 +445,7 @@ class WebSocketHandler(object):
     thresholds -- threshold values as list of ints
     """
     await self.send_json_all(['thresholds', {'thresholds': thresholds}])
-  
+
   async def broadcast_values(self, values):
     """
     Send current sensor values to all connected clients
@@ -514,10 +537,12 @@ class WebSocketHandler(object):
       await ws.close()
       print('Client disconnected')
 
+
 class DefaultsHandler(object):
   """
   Handle the /defaults route.
   """
+
   def __init__(self):
     # Don't write to the profile handler from this class.
     # Only the main task loop should be be updating it.
@@ -534,22 +559,24 @@ class DefaultsHandler(object):
     Return an initial set of values for the WebUI to use for setup before
     connecting to the websocket.
     """
-    del request # unused
+    del request  # unused
     print({
         'profiles': self._profile_handler.get_profile_names(),
         'cur_profile': self._profile_handler.get_profile_names(),
         'thresholds': self._profile_handler.get_profile_names()
-      })
+    })
     if self._profile_handler:
       return json_response({
-        'profiles': self._profile_handler.get_profile_names(),
-        'cur_profile': self._profile_handler.get_current_profile(),
-        'thresholds': self._profile_handler.get_cur_thresholds()
+          'profiles': self._profile_handler.get_profile_names(),
+          'cur_profile': self._profile_handler.get_current_profile(),
+          'thresholds': self._profile_handler.get_cur_thresholds()
       })
     else:
       return json_response({}, status=503)
 
-async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler):
+
+async def run_main_task_loop(websocket_handler, serial_handler,
+                             defaults_handler):
   """
   Connect to a serial device and poll it for sensor values.
   Handle incoming commands from WebUI clients.
@@ -571,39 +598,56 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
   async def update_threshold(values, index):
     thresholds = await serial_handler.update_threshold(index, values[index])
     profile_handler.update_thresholds(thresholds)
-    await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
-    print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
+    await websocket_handler.broadcast_thresholds(
+        profile_handler.get_cur_thresholds())
+    print(
+        f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
+    )
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
     profile_handler.update_thresholds(thresholds)
-    await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
-    print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
+    await websocket_handler.broadcast_thresholds(
+        profile_handler.get_cur_thresholds())
+    print(
+        f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
+    )
 
   async def add_profile(profile_name, thresholds):
     profile_handler.add_profile(profile_name, thresholds)
     # When we add a profile, we are using the currently loaded thresholds so we
     # don't need to explicitly apply anything.
-    await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
-    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print(f'Changed to new profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
+    await websocket_handler.broadcast_profiles(
+        profile_handler.get_profile_names())
+    await websocket_handler.broadcast_cur_profile(
+        profile_handler.get_current_profile())
+    print(
+        f'Changed to new profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
+    )
 
   async def remove_profile(profile_name):
     profile_handler.remove_profile(profile_name)
     # Need to apply the thresholds of the profile we've fallen back to.
     thresholds = profile_handler.get_cur_thresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
-    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print(f'Removed profile "{profile_name}". Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
+    await websocket_handler.broadcast_profiles(
+        profile_handler.get_profile_names())
+    await websocket_handler.broadcast_cur_profile(
+        profile_handler.get_current_profile())
+    print(
+        f'Removed profile "{profile_name}". Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
+    )
 
   async def change_profile(profile_name):
     profile_handler.change_profile(profile_name)
     # Need to apply the thresholds of the profile we've changed to.
     thresholds = profile_handler.get_cur_thresholds()
     await update_thresholds(thresholds)
-    await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print(f'Changed to profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
+    await websocket_handler.broadcast_cur_profile(
+        profile_handler.get_current_profile())
+    print(
+        f'Changed to profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}'
+    )
 
   async def handle_client_message(data):
     action = data[0]
@@ -637,30 +681,36 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       thresholds = profile_handler.get_cur_thresholds()
       thresholds = await serial_handler.update_thresholds(thresholds)
       profile_handler.update_thresholds(thresholds)
-      print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {profile_handler.get_cur_thresholds()}')
+      print(
+          f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {profile_handler.get_cur_thresholds()}'
+      )
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
-      
+
       # Minimum delay in seconds to wait betwen getting current sensor values
       poll_values_wait_seconds = 1.0 / 100
 
       # Poll sensor values and handle client message
-      poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
+      poll_values_task = asyncio.create_task(
+          asyncio.sleep(poll_values_wait_seconds))
       receive_json_task = asyncio.create_task(websocket_handler.receive_json())
       while True:
-        done, _ = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait([poll_values_task, receive_json_task],
+                                     return_when=asyncio.FIRST_COMPLETED)
         for task in done:
           if task == poll_values_task:
             if websocket_handler.has_clients:
               values = await serial_handler.get_values()
               await websocket_handler.broadcast_values(values)
-            poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
+            poll_values_task = asyncio.create_task(
+                asyncio.sleep(poll_values_wait_seconds))
           if task == receive_json_task:
             data = await task
             await handle_client_message(data)
             websocket_handler.task_done()
-            receive_json_task = asyncio.create_task(websocket_handler.receive_json())
+            receive_json_task = asyncio.create_task(
+                websocket_handler.receive_json())
 
     except (serial.SerialException, SerialReadTimeoutError) as e:
       # In case of serial error, disconnect all clients. The WebUI will try to reconnect.
@@ -668,8 +718,10 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       logger.exception('Serial error: %s', e)
       websocket_handler.serial_connected = False
       defaults_handler.set_profile_handler(None)
-      await websocket_handler.close_websockets(code=WSCloseCode.INTERNAL_ERROR, message='Serial error')
+      await websocket_handler.close_websockets(code=WSCloseCode.INTERNAL_ERROR,
+                                               message='Serial error')
       await asyncio.sleep(3)
+
 
 def main():
   """Set up and run the http server."""
@@ -677,38 +729,40 @@ def main():
   websocket_handler = WebSocketHandler()
 
   build_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'build')
-  )
+      os.path.join(os.path.dirname(__file__), '..', 'build'))
 
   if NO_SERIAL:
     serial_handler = FakeSerialHandler(num_sensors=4)
   else:
-    serial_handler = SerialHandler(SyncSerialSender(port=SERIAL_PORT, timeout=0.05))
+    serial_handler = SerialHandler(
+        SyncSerialSender(port=SERIAL_PORT, timeout=0.05))
 
   async def on_startup(app):
-    del app # unused
-    asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler,
-                                           serial_handler=serial_handler,
-                                           defaults_handler=defaults_handler))
+    del app  # unused
+    asyncio.create_task(
+        run_main_task_loop(websocket_handler=websocket_handler,
+                           serial_handler=serial_handler,
+                           defaults_handler=defaults_handler))
 
   async def on_shutdown(app):
-    del app # unused
-    await websocket_handler.close_websockets(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
+    del app  # unused
+    await websocket_handler.close_websockets(code=WSCloseCode.GOING_AWAY,
+                                             message='Server shutdown')
 
   async def get_index(request):
-    del request # unused
+    del request  # unused
     return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
   app = web.Application()
   app.add_routes([
-    web.get('/defaults', defaults_handler.handle_defaults),
-    web.get('/ws', websocket_handler.handle_ws),
+      web.get('/defaults', defaults_handler.handle_defaults),
+      web.get('/ws', websocket_handler.handle_ws),
   ])
   if SERVE_STATIC_FRONTEND_FILES:
     app.add_routes([
-      web.get('/', get_index),
-      web.get('/plot', get_index),
-      web.static('/', build_dir),
+        web.get('/', get_index),
+        web.get('/plot', get_index),
+        web.static('/', build_dir),
     ])
   app.on_shutdown.append(on_shutdown)
   app.on_startup.append(on_startup)
@@ -718,6 +772,7 @@ def main():
   print(' * WebUI can be found at: http://' + ip_address + ':' + str(HTTP_PORT))
 
   web.run_app(app, port=HTTP_PORT)
+
 
 if __name__ == '__main__':
   main()
