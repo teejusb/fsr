@@ -20,6 +20,10 @@ HTTP_PORT = 5000
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
+# Serve the index and assets for the Web UI.
+# If False, only serve the websocket and JSON endpoints.
+SERVE_STATIC_FRONTEND_FILES = True
+
 class CommandFormatError(Exception):
   """Serial responded but command was not in the expected format."""
 
@@ -355,7 +359,7 @@ class SerialHandler(object):
 
 class WebSocketHandler(object):
   """
-  Handle websocket connections to communicate with the Web UI.
+  Handle websocket connections to communicate with the WebUI.
 
   The design of this class is based on the assumptions that all
   connected clients should be kept in sync. Messages received from any
@@ -679,7 +683,7 @@ def main():
     web.get('/defaults', defaults_handler.handle_defaults),
     web.get('/ws', websocket_handler.handle_ws),
   ])
-  if not NO_SERIAL:
+  if SERVE_STATIC_FRONTEND_FILES:
     app.add_routes([
       web.get('/', get_index),
       web.get('/plot', get_index),
