@@ -487,6 +487,7 @@ class WebSocketHandler(object):
     Receive client messages from this websocket connection in the main task
     loop with the `receive_json` method of this class.
     """
+
     if not self.serial_connected:
       return json_response({}, status=503)
 
@@ -533,6 +534,7 @@ class DefaultsHandler(object):
     Return an initial set of values for the WebUI to use for setup before
     connecting to the websocket.
     """
+    del request # unused
     if self._profile_handler:
       return json_response({
         'profiles': self._profile_handler.get_profile_names(),
@@ -648,7 +650,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       poll_values_task = asyncio.create_task(asyncio.sleep(poll_values_wait_seconds))
       receive_json_task = asyncio.create_task(websocket_handler.receive_json())
       while True:
-        done, pending = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait([poll_values_task, receive_json_task], return_when=asyncio.FIRST_COMPLETED)
         for task in done:
           if task == poll_values_task:
             if websocket_handler.has_clients:
@@ -685,14 +687,17 @@ def main():
     serial_handler = SerialHandler(SyncSerialSender(port=SERIAL_PORT, timeout=0.05))
 
   async def on_startup(app):
+    del app # unused
     asyncio.create_task(run_main_task_loop(websocket_handler=websocket_handler,
                                            serial_handler=serial_handler,
                                            defaults_handler=defaults_handler))
 
   async def on_shutdown(app):
+    del app # unused
     await websocket_handler.close_websockets(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
 
   async def get_index(request):
+    del request # unused
     return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
   app = web.Application()
