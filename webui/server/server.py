@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+"""
+FSR WebUI Server
+
+Connect to a serial device and poll it for sensor values.
+Handle incoming commands from WebUI clients.
+"""
 import asyncio
 import logging
 import os
