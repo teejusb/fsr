@@ -510,13 +510,25 @@ class WebSocketHandler(object):
       print('Client disconnected')
 
 class DefaultsHandler(object):
+  """
+  Handle the /defaults route.
+  """
   def __init__(self):
+    # Don't write to the profile handler from this class.
+    # Only the main task loop should be be updating it.
     self._profile_handler = None
 
   def set_profile_handler(self, profile_handler):
+    """
+    Set a ProfileHandler instance here, or set to None to clear it.
+    """
     self._profile_handler = profile_handler
 
   async def handle_defaults(self, request):
+    """
+    Return an initial set of values for the WebUI to use for setup before
+    connecting to the websocket.
+    """
     if self._profile_handler:
       return json_response({
         'profiles': self._profile_handler.GetProfileNames(),
