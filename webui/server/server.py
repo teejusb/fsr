@@ -54,7 +54,7 @@ class ProfileHandler(object):
   def _assert_thresholds_length(self, thresholds):
     """Raise error if thresholds list is not the expected length."""
     if not len(thresholds) == self._num_sensors:
-      raise ValueError('Expected {} threshold values, got {}'.format(self._num_sensors, thresholds))
+      raise ValueError(f'Expected {self._num_sensors} threshold values, got {thresholds}')
 
   def _save(self):
     """
@@ -265,7 +265,7 @@ class SyncSerialSender(object):
     # instance's configured timeout, it will return whatever it has
     # read so far. PySerial does not throw an exception, but we will.
     if not line.endswith('\n'):
-      raise SerialReadTimeoutError('Timeout reading response to command. {} {}'.format(command, line))
+      raise SerialReadTimeoutError(f'Timeout reading response to command. {command} {line}')
 
     return line.strip()
 
@@ -308,7 +308,7 @@ class SerialHandler(object):
     # v num1 num2 num3 num4
     parts = response.split()
     if parts[0] != 'v':
-      raise CommandFormatError('Expected values in response, got "{}"' % (response))
+      raise CommandFormatError(f'Expected values in response, got "{response}"')
     return [int(x) for x in parts[1:]]
 
   async def get_thresholds(self):
@@ -320,7 +320,7 @@ class SerialHandler(object):
     # t num1 num2 num3 num4
     parts = response.split()
     if parts[0] != 't':
-      raise CommandFormatError('Expected thresholds in response, got "{}"' % (response))
+      raise CommandFormatError(f'Expected thresholds in response, got "{response}"')
     return [int(x) for x in parts[1:]]  
 
   async def update_threshold(self, index, threshold):
@@ -332,13 +332,13 @@ class SerialHandler(object):
     index -- index starting from 0 of the threshold to update
     threshold -- new threshold value
     """
-    threshold_cmd = '%d %d\n' % (index, threshold)
+    threshold_cmd = f'{index} {threshold}\n'
     response = await asyncio.to_thread(lambda: self._sync_serial_sender.send(threshold_cmd))
     # Expect updated thresholds preceded by a 't'.
     # t num1 num2 num3 num4
     parts = response.split()
     if parts[0] != 't':
-      raise CommandFormatError('Expected thresholds in response, got "{}"' % (response))
+      raise CommandFormatError(f'Expected thresholds in response, got "{response}"')
     return [int(x) for x in parts[1:]]
   
   async def update_thresholds(self, thresholds):
@@ -535,6 +535,11 @@ class DefaultsHandler(object):
     connecting to the websocket.
     """
     del request # unused
+    print({
+        'profiles': self._profile_handler.get_profile_names(),
+        'cur_profile': self._profile_handler.get_profile_names(),
+        'thresholds': self._profile_handler.get_profile_names()
+      })
     if self._profile_handler:
       return json_response({
         'profiles': self._profile_handler.get_profile_names(),
@@ -567,15 +572,13 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
     thresholds = await serial_handler.update_threshold(index, values[index])
     profile_handler.update_thresholds(thresholds)
     await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
-    print('Profile is "{}". Thresholds are: {}'.format(
-      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
+    print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def update_thresholds(values):
     thresholds = await serial_handler.update_thresholds(values)
     profile_handler.update_thresholds(thresholds)
     await websocket_handler.broadcast_thresholds(profile_handler.get_cur_thresholds())
-    print('Profile is "{}". Thresholds are: {}'.format(
-      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
+    print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def add_profile(profile_name, thresholds):
     profile_handler.add_profile(profile_name, thresholds)
@@ -583,8 +586,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
     # don't need to explicitly apply anything.
     await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
     await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print('Changed to new profile "{}". Thresholds are: {}'.format(
-      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
+    print(f'Changed to new profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def remove_profile(profile_name):
     profile_handler.remove_profile(profile_name)
@@ -593,8 +595,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_profiles(profile_handler.get_profile_names())
     await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print('Removed profile "{}". Profile is "{}". Thresholds are: {}'.format(
-      profile_name, profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
+    print(f'Removed profile "{profile_name}". Profile is "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def change_profile(profile_name):
     profile_handler.change_profile(profile_name)
@@ -602,8 +603,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
     thresholds = profile_handler.get_cur_thresholds()
     await update_thresholds(thresholds)
     await websocket_handler.broadcast_cur_profile(profile_handler.get_current_profile())
-    print('Changed to profile "{}". Thresholds are: {}'.format(
-      profile_handler.get_current_profile(), str(profile_handler.get_cur_thresholds())))
+    print(f'Changed to profile "{profile_handler.get_current_profile()}". Thresholds are: {str(profile_handler.get_cur_thresholds())}')
 
   async def handle_client_message(data):
     action = data[0]
@@ -637,8 +637,7 @@ async def run_main_task_loop(websocket_handler, serial_handler, defaults_handler
       thresholds = profile_handler.get_cur_thresholds()
       thresholds = await serial_handler.update_thresholds(thresholds)
       profile_handler.update_thresholds(thresholds)
-      print('Profile is "{}". Thresholds are: {}'.format(
-        profile_handler.get_current_profile(), profile_handler.get_cur_thresholds()))
+      print(f'Profile is "{profile_handler.get_current_profile()}". Thresholds are: {profile_handler.get_cur_thresholds()}')
 
       # Handle GET /defaults using new profile_handler
       defaults_handler.set_profile_handler(profile_handler)
