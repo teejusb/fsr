@@ -60,7 +60,7 @@ class ProfileHandler(object):
     """
     Save profiles to file. The empty-name '' profile is always skipped.
     """
-    with open(self._filename, 'w') as f:
+    with open(self._filename, 'w', encoding="utf-8") as f:
       for name, thresholds in self._profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
@@ -72,7 +72,7 @@ class ProfileHandler(object):
     """
     num_profiles = 0
     if os.path.exists(self._filename):
-      with open(self._filename, 'r') as f:
+      with open(self._filename, 'r', encoding="utf-8") as f:
         for line in f:
           parts = line.split()
           if len(parts) == (self._num_sensors + 1):
