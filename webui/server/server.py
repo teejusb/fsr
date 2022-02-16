@@ -13,7 +13,7 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = '/dev/ttyACM0'
 HTTP_PORT = 5000
 
 # Used for developmental purposes. Set this to true when you just want to
@@ -60,7 +60,7 @@ class ProfileHandler(object):
     """
     Save profiles to file. The empty-name '' profile is always skipped.
     """
-    with open(self._filename, 'w', encoding="utf-8") as f:
+    with open(self._filename, 'w', encoding='utf-8') as f:
       for name, thresholds in self._profiles.items():
         if name:
           f.write(name + ' ' + ' '.join(map(str, thresholds)) + '\n')
@@ -72,7 +72,7 @@ class ProfileHandler(object):
     """
     num_profiles = 0
     if os.path.exists(self._filename):
-      with open(self._filename, 'r', encoding="utf-8") as f:
+      with open(self._filename, 'r', encoding='utf-8') as f:
         for line in f:
           parts = line.split()
           if len(parts) == (self._num_sensors + 1):
@@ -117,7 +117,7 @@ class ProfileHandler(object):
     if profile_name in self._profiles:
       self._cur_profile = profile_name
     else:
-      print("Ignoring ChangeProfile, ", profile_name, " not in ", self._profiles)
+      print('Ignoring ChangeProfile, ', profile_name, ' not in ', self._profiles)
 
   def get_profile_names(self):
     """
@@ -149,7 +149,7 @@ class ProfileHandler(object):
     Trying to delete an unknown profile will print a warning and do nothing.
     """
     if not profile_name in self._profiles:
-      print("No profile named ", profile_name, " to delete in ", self._profiles)
+      print('No profile named ', profile_name, ' to delete in ', self._profiles)
       return
     del self._profiles[profile_name]
     if profile_name == self._cur_profile:
@@ -238,7 +238,7 @@ class SyncSerialSender(object):
   
   @property
   def is_open(self):
-    "Return True if serial port is open, false otherwise."
+    """Return True if serial port is open, false otherwise."""
     return self._ser and self._ser.is_open
 
   def send(self, command):
