@@ -13,6 +13,7 @@ import Col from 'react-bootstrap/Col'
 
 import Form from 'react-bootstrap/Form'
 import Button from 'react-bootstrap/Button'
+import ToggleButton from 'react-bootstrap/ToggleButton'
 
 import {
   BrowserRouter as Router,
@@ -409,11 +410,18 @@ function ValueMonitors(props) {
 
 function Plot(props) {
   const canvasRef = React.useRef(null);
-  const colors = ['red', 'orange', 'green', 'blue'];
-  const display = [true, true, true, true];
+  const numSensors = props.numSensors;
   const webUIDataRef = props.webUIDataRef;
+  const [display, setDisplay] = useState(new Array(numSensors).fill(true));
+  // `buttonNames` is only used if the number of sensors matches the number of button names.
+  const buttonNames = ['Left', 'Down', 'Up', 'Right'];
   const curValues = webUIDataRef.current.curValues;
   const curThresholds = webUIDataRef.current.curThresholds;
+
+  // Color values for sensors
+  const degreesPerSensor = 360 / numSensors;
+  const colors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 40%)`);
+  const darkColors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 35%)`)
 
   useEffect(() => {
     let requestId;
@@ -456,16 +464,14 @@ function Plot(props) {
       previousTimestamp = timestamp;
 
       // Add background fill.
-      let grd = ctx.createLinearGradient(canvas.width/2, 0, canvas.width/2 ,canvas.height);
-      grd.addColorStop(0, 'white');
-      grd.addColorStop(1, 'lightgray');
-      ctx.fillStyle = grd;
+      ctx.fillStyle = "#f8f9fa";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Border
       const spacing = 10;
       const box_width = canvas.width-spacing*2;
       const box_height = canvas.height-spacing*2
+      ctx.strokeStyle = 'darkgray';
       ctx.beginPath();
       ctx.rect(spacing, spacing, box_width, box_height);
       ctx.stroke();
@@ -481,7 +487,7 @@ function Plot(props) {
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/MAX_SIZE;
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
@@ -502,11 +508,11 @@ function Plot(props) {
       }
 
       // Display the current thresholds.
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
           ctx.beginPath();
           ctx.setLineDash([]);
-          ctx.strokeStyle = 'dark' + colors[i];
+          ctx.strokeStyle = darkColors[i];
           ctx.lineWidth = 2;
           ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
           ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
@@ -516,7 +522,7 @@ function Plot(props) {
 
       // Display the current value for each of the sensors.
       ctx.font = "30px " + bodyFontFamily;
-      for (let i = 0; i < 4; ++i) {
+      for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
           ctx.fillStyle = colors[i];
           if (curValues.length < MAX_SIZE) {
@@ -537,10 +543,33 @@ function Plot(props) {
       cancelAnimationFrame(requestId);
       window.removeEventListener('resize', setDimensions);
     };
-  }, [colors, curThresholds, curValues, display, webUIDataRef]);
+  }, [colors, curThresholds, curValues, darkColors, display, numSensors, webUIDataRef]);
 
-  function ToggleLine(index) {
-    display[index] = !display[index];
+  const ToggleLine = (index) => {
+    setDisplay(display => {
+      const updated = [...display];
+      updated[index] = !updated[index];
+      return updated;
+    });
+  };
+
+  const toggleButtons = [];
+  for (let i = 0; i < numSensors; i++) {
+    toggleButtons.push(
+      <ToggleButton
+        className="ToggleButton-plot-sensor"
+        key={i}
+        type="checkbox"
+        checked={display[i]}
+        variant={display[i] ? "light" : "secondary"}
+        size="sm"
+        onChange={() => ToggleLine(i)}
+      >
+        <b style={{color: display[i] ? darkColors[i] : "#f8f9fa"}}>
+          {numSensors === buttonNames.length ? buttonNames[i] : i}
+        </b>
+      </ToggleButton>
+    );
   }
 
   return (
@@ -549,21 +578,7 @@ function Plot(props) {
         <Row>
           <Col style={{height: '9vh', paddingTop: '2vh'}}>
             <span>Display: </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(0)}>
-              <b style={{color: colors[0]}}>Left</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(1)}>
-              <b style={{color: colors[1]}}>Down</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(2)}>
-              <b style={{color: colors[2]}}>Up</b>
-            </Button>
-            <span> </span>
-            <Button variant="light" size="sm" onClick={() => ToggleLine(3)}>
-              <b style={{color: colors[3]}}>Right</b>
-            </Button>
+            {toggleButtons}
           </Col>
         </Row>
         <Row>
@@ -672,7 +687,7 @@ function FSRWebUI(props) {
             </ValueMonitors>
           </Route>
           <Route path="/plot">
-            <Plot webUIDataRef={webUIDataRef} />
+            <Plot numSensors={numSensors} webUIDataRef={webUIDataRef} />
           </Route>
         </Switch>
       </Router>
