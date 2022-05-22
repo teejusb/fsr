@@ -161,7 +161,7 @@ class SensorState {
         #if defined(ENABLE_LIGHTS)
         kLightsPin(curLightPin++),
         #endif
-        buttonNum(curButtonNum++) {
+        buttonNum(curButtonNum) {
     for (size_t i = 0; i < kMaxSharedSensors; ++i) {
       sensor_ids_[i] = 0;
       individual_states_[i] = SensorState::OFF;
