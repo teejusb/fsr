@@ -5,6 +5,12 @@
   #define CAN_AVERAGE
 #endif
 
+#if defined(_SFR_BYTE) && defined(_BV) && defined(ADCSRA)
+  #define CLEAR_BIT(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+  #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
+
+
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
   void ButtonStart() {
@@ -94,7 +100,8 @@ class WeightedMovingAverage {
     // are integers and we need to return an int anyways. Off by one isn't
     // substantial here.
     // Sum of weights = sum of all integers from [1, size_]
-    return next_weighted_sum/((size_ * (size_ + 1)) / 2);
+    int16_t sum_weights = ((size_ * (size_ + 1)) / 2);
+    return next_weighted_sum/sum_weights;
   }
 
   // Delete default constructor. Size MUST be explicitly specified.
@@ -133,6 +140,9 @@ class HullMovingAverage {
     return hull_value;
   }
 
+  // Delete default constructor. Size MUST be explicitly specified.
+  HullMovingAverage() = delete;
+
  private:
   WeightedMovingAverage wma1_;
   WeightedMovingAverage wma2_;
@@ -151,7 +161,7 @@ class SensorState {
         #if defined(ENABLE_LIGHTS)
         kLightsPin(curLightPin++),
         #endif
-        kButtonNum(curButtonNum++) {
+        buttonNum(curButtonNum++) {
     for (size_t i = 0; i < kMaxSharedSensors; ++i) {
       sensor_ids_[i] = 0;
       individual_states_[i] = SensorState::OFF;
@@ -159,6 +169,14 @@ class SensorState {
     #if defined(ENABLE_LIGHTS)
       pinMode(kLightsPin, OUTPUT);
     #endif
+  }
+
+  void Init() {
+    if (initialized_) {
+      return;
+    }
+    buttonNum = curButtonNum++;
+    initialized_ = true;
   }
 
   // Adds a new sensor to share this state with. If we try adding a sensor that
@@ -173,6 +191,9 @@ class SensorState {
   void EvaluateSensor(uint8_t sensor_id,
                       int16_t cur_value,
                       int16_t user_threshold) {
+    if (!initialized_) {
+      return;
+    }
     size_t sensor_index = GetIndexForSensor(sensor_id);
 
     // The sensor we're evaluating is not part of this shared state.
@@ -208,7 +229,7 @@ class SensorState {
               }
             }
             if (turn_on) {
-              ButtonPress(kButtonNum);
+              ButtonPress(buttonNum);
               combined_state_ = SensorState::ON;
               #if defined(ENABLE_LIGHTS)
                 digitalWrite(kLightsPin, HIGH);
@@ -227,7 +248,7 @@ class SensorState {
               }
             }
             if (turn_off) {
-              ButtonRelease(kButtonNum);
+              ButtonRelease(buttonNum);
               combined_state_ = SensorState::OFF;
               #if defined(ENABLE_LIGHTS)
                 digitalWrite(kLightsPin, LOW);
@@ -251,6 +272,9 @@ class SensorState {
   }
 
  private:
+  // Ensures that Init() has been called at exactly once on this SensorState.
+  bool initialized_;
+
   // The collection of sensors shared with this state.
   uint8_t sensor_ids_[kMaxSharedSensors];
   // The number of sensors this state combines with.
@@ -275,7 +299,8 @@ class SensorState {
   #endif
 
   // The button number this state corresponds to.
-  const uint8_t kButtonNum;
+  // Set once in Init().
+  uint8_t buttonNum;
 };
 
 /*===========================================================================*/
@@ -315,6 +340,11 @@ class Sensor {
       should_delete_state_ = true;
     }
 
+    // Initialize the sensor state.
+    // This sets the button number corresponding to the sensor state.
+    // Trying to re-initialize a sensor_state_ is a no-op, so no harm in 
+    sensor_state_->Init();
+
     // If this sensor hasn't been added to the state, then try adding it.
     if (sensor_state_->GetIndexForSensor(sensor_id) == SIZE_MAX) {
       sensor_state_->AddSensor(sensor_id);
@@ -338,6 +368,7 @@ class Sensor {
     #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
       cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
+      cur_value_ = constrain(cur_value_, 0, 1023);
     #else
       // Don't use averaging for Arduino Leonardo, Uno, Mega1280, and Mega2560
       // since averaging seems to be broken with it. This should also include
@@ -462,8 +493,9 @@ class SerialProcessor {
         case 'T':
           PrintThresholds();
           break;
-        default:
+        case '0' ... '9': // Case ranges are non-standard but work in gcc
           UpdateAndPrintThreshold(bytes_read);
+        default:
           break;
       }
     }  
@@ -471,17 +503,20 @@ class SerialProcessor {
 
   void UpdateAndPrintThreshold(size_t bytes_read) {
     // Need to specify:
-    // Sensor number + Threshold value.
-    // {0, 1, 2, 3} + "0"-"1023"
-    // e.g. 3180 (fourth FSR, change threshold to 180)
+    // Sensor number + Threshold value, separated by a space.
+    // {0, 1, 2, 3,...} + "0"-"1023"
+    // e.g. 3 180 (fourth FSR, change threshold to 180)
     
-    if (bytes_read < 2 || bytes_read > 5) { return; }
+    if (bytes_read < 3 || bytes_read > 7) { return; }
 
-    size_t sensor_index = buffer_[0] - '0';
-    if (sensor_index < 0 || sensor_index >= kNumSensors) { return; }
+    char* next = nullptr;
+    size_t sensor_index = strtoul(buffer_, &next, 10);
+    if (sensor_index >= kNumSensors) { return; }
 
-    kSensors[sensor_index].UpdateThreshold(
-        strtoul(buffer_ + 1, nullptr, 10));
+    int16_t sensor_threshold = strtol(next, nullptr, 10);
+    if (sensor_threshold < 0 || sensor_threshold > 1023) { return; }
+
+    kSensors[sensor_index].UpdateThreshold(sensor_threshold);
     PrintThresholds();
   }
 
@@ -531,6 +566,15 @@ void setup() {
     // Button numbers should start with 1.
     kSensors[i].Init(i + 1);
   }
+  
+  #if defined(CLEAR_BIT) && defined(SET_BIT)
+	  // Set the ADC prescaler to 16 for boards that support it,
+	  // which is a good balance between speed and accuracy.
+	  // More information can be found here: http://www.gammon.com.au/adc
+	  SET_BIT(ADCSRA, ADPS2);
+	  CLEAR_BIT(ADCSRA, ADPS1);
+	  CLEAR_BIT(ADCSRA, ADPS0);
+  #endif
 }
 
 void loop() {
@@ -538,8 +582,11 @@ void loop() {
   // We only want to send over USB every millisecond, but we still want to
   // read the analog values as fast as we can to have the most up to date
   // values for the average.
-  static bool willSend = (loopTime == -1 ||
-                          startMicros - lastSend + loopTime >= 1000);
+  static bool willSend;
+  // Separate out the initialization and the update steps for willSend.
+  // Since willSend is static, we want to make sure we update the variable
+  // every time we loop.
+  willSend = (loopTime == -1 || startMicros - lastSend + loopTime >= 1000);
 
   serialProcessor.CheckAndMaybeProcessData();
 

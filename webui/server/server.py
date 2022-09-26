@@ -10,7 +10,7 @@ from collections import OrderedDict
 from random import normalvariate
 
 import serial
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSCloseCode, WSMsgType
 from aiohttp.web import json_response
 
 logger = logging.getLogger(__name__)
@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 SERIAL_PORT = "/dev/ttyACM0"
 HTTP_PORT = 5000
 
-# Threads for the serial reader and writer.
-read_thread = None
-write_thread = None
+# Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
-# L, D, U, R
-sensor_numbers = [0, 1, 2, 3]
+# Amount of sensors.
+num_sensors = 4
+
+# Initialize sensor ids.
+sensor_numbers = range(num_sensors)
 
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
@@ -48,7 +49,7 @@ class ProfileHandler(object):
     self.profiles = OrderedDict()
     self.cur_profile = ''
     # Have a default no-name profile we can use in case there are no profiles.
-    self.profiles[''] = [0, 0, 0, 0]
+    self.profiles[''] = [0] * num_sensors
     self.loaded = False
 
   def MaybeLoad(self):
@@ -58,7 +59,7 @@ class ProfileHandler(object):
         with open(self.filename, 'r') as f:
           for line in f:
             parts = line.split()
-            if len(parts) == 5:
+            if len(parts) == (num_sensors+1):
               self.profiles[parts[0]] = [int(x) for x in parts[1:]]
               num_profiles += 1
               # Change to the first profile found.
@@ -103,7 +104,7 @@ class ProfileHandler(object):
   def AddProfile(self, profile_name, thresholds):
     self.profiles[profile_name] = thresholds
     if self.cur_profile == '':
-      self.profiles[''] = [0, 0, 0, 0]
+      self.profiles[''] = [0] * num_sensors
     # ChangeProfile emits 'thresholds' and 'cur_profile'
     self.ChangeProfile(profile_name)
     with open(self.filename, 'w') as f:
@@ -150,12 +151,12 @@ class SerialHandler(object):
     self.ser = None
     self.port = port
     self.timeout = timeout
-    self.write_queue = queue.Queue(10)
+    self.write_queue = queue.Queue(num_sensors + 10)
     self.profile_handler = profile_handler
 
     # Use this to store the values when emulating serial so the graph isn't too
     # jumpy. Only used when NO_SERIAL is true.
-    self.no_serial_values = [0, 0, 0, 0]
+    self.no_serial_values = [0] * num_sensors
 
   def ChangePort(self, port):
     if self.ser:
@@ -177,7 +178,7 @@ class SerialHandler(object):
       if self.ser:
         # Apply currently loaded thresholds when the microcontroller connects.
         for i, threshold in enumerate(self.profile_handler.GetCurThresholds()):
-          threshold_cmd = str(sensor_numbers[i]) + str(threshold) + '\n'
+          threshold_cmd = '%d %d\n' % (sensor_numbers[i], threshold)
           self.write_queue.put(threshold_cmd, block=False)
     except queue.Full as e:
       logger.error('Could not set thresholds. Queue full.')
@@ -189,7 +190,7 @@ class SerialHandler(object):
     def ProcessValues(values):
       # Fix our sensor ordering.
       actual = []
-      for i in range(4):
+      for i in range(num_sensors):
         actual.append(values[sensor_numbers[i]])
       broadcast(['values', {'values': actual}])
       time.sleep(0.01)
@@ -198,7 +199,7 @@ class SerialHandler(object):
       cur_thresholds = self.profile_handler.GetCurThresholds()
       # Fix our sensor ordering.
       actual = []
-      for i in range(4):
+      for i in range(num_sensors):
         actual.append(values[sensor_numbers[i]])
       for i, (cur, act) in enumerate(zip(cur_thresholds, actual)):
         if cur != act:
@@ -206,10 +207,10 @@ class SerialHandler(object):
 
     while not thread_stop_event.isSet():
       if NO_SERIAL:
-        offsets = [int(normalvariate(0, 5)) for _ in range(4)]
+        offsets = [int(normalvariate(0, num_sensors+1)) for _ in range(num_sensors)]
         self.no_serial_values = [
           max(0, min(self.no_serial_values[i] + offsets[i], 1023))
-          for i in range(4)
+          for i in range(num_sensors)
         ]
         broadcast(['values', {'values': self.no_serial_values}])
         time.sleep(0.01)
@@ -218,6 +219,7 @@ class SerialHandler(object):
           self.Open()
           # Still not open, retry loop.
           if not self.ser:
+            time.sleep(1)
             continue
 
         try:
@@ -231,7 +233,7 @@ class SerialHandler(object):
           # All commands are of the form:
           #   cmd num1 num2 num3 num4
           parts = line.split()
-          if len(parts) != 5:
+          if len(parts) != num_sensors+1:
             continue
           cmd = parts[0]
           values = [int(x) for x in parts[1:]]
@@ -248,7 +250,10 @@ class SerialHandler(object):
 
   def Write(self):
     while not thread_stop_event.isSet():
-      command = self.write_queue.get()
+      try:
+        command = self.write_queue.get(timeout=1)
+      except queue.Empty:
+        continue
       if NO_SERIAL:
         if command[0] == 't':
           broadcast(['thresholds',
@@ -278,11 +283,10 @@ class SerialHandler(object):
 profile_handler = ProfileHandler()
 serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
 
-
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
-    threshold_cmd = str(sensor_numbers[index]) + str(values[index]) + '\n'
+    threshold_cmd = '%d %d\n' % (sensor_numbers[index], values[index])
     serial_handler.write_queue.put(threshold_cmd, block=False)
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
@@ -336,8 +340,8 @@ async def get_ws(request):
   ws = web.WebSocketResponse()
   await ws.prepare(request)
 
+  request.app['websockets'].append(ws)
   print('Client connected')
-  profile_handler.MaybeLoad()
 
   # The above does emit if there are differences, so have an extra for the
   # case there are no differences.
@@ -345,20 +349,6 @@ async def get_ws(request):
     'thresholds',
     {'thresholds': profile_handler.GetCurThresholds()},
   ])
-
-  global read_thread, write_thread
-
-  if not read_thread or not read_thread.is_alive():
-    print('Starting Read thread')
-    read_thread = threading.Thread(target=serial_handler.Read)
-    read_thread.daemon = True
-    read_thread.start()
-
-  if not write_thread or not write_thread.is_alive():
-    print('Starting Write thread')
-    write_thread = threading.Thread(target=serial_handler.Write)
-    write_thread.daemon = True
-    write_thread.start()
 
   # Potentially fetch any threshold values from the microcontroller that
   # may be out of sync with our profiles.
@@ -412,6 +402,7 @@ async def get_ws(request):
   except ConnectionResetError:
     pass
   finally:
+    request.app['websockets'].remove(ws)
     with out_queues_lock:
       out_queues.remove(queue)
 
@@ -429,8 +420,25 @@ build_dir = os.path.abspath(
 async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
+async def on_startup(app):
+  profile_handler.MaybeLoad()
+
+  read_thread = threading.Thread(target=serial_handler.Read)
+  read_thread.start()
+
+  write_thread = threading.Thread(target=serial_handler.Write)
+  write_thread.start()
+
+async def on_shutdown(app):
+  for ws in app['websockets']:
+    await ws.close(code=WSCloseCode.GOING_AWAY, message='Server shutdown')
+  thread_stop_event.set()
 
 app = web.Application()
+
+# List of open websockets, to close when the app shuts down.
+app['websockets'] = []
+
 app.add_routes([
   web.get('/defaults', get_defaults),
   web.get('/ws', get_ws),
@@ -441,7 +449,8 @@ if not NO_SERIAL:
     web.get('/plot', get_index),
     web.static('/', build_dir),
   ])
-
+app.on_shutdown.append(on_shutdown)
+app.on_startup.append(on_startup)
 
 if __name__ == '__main__':
   hostname = socket.gethostname()
