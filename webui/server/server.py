@@ -16,14 +16,14 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "COM7"
 HTTP_PORT = 5000
 
 # Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
 # Amount of sensors.
-num_sensors = 4
+num_sensors = 6
 
 # Initialize sensor ids.
 sensor_numbers = range(num_sensors)
