@@ -16,8 +16,8 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "COM7"
-HTTP_PORT = 5000
+SERIAL_PORT = "/dev/cu.usbmodemHIDDI1"
+HTTP_PORT = 8000
 
 # Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
@@ -31,7 +31,6 @@ sensor_numbers = range(num_sensors)
 # Used for developmental purposes. Set this to true when you just want to
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
-
 
 class ProfileHandler(object):
   """
@@ -447,6 +446,7 @@ if not NO_SERIAL:
   app.add_routes([
     web.get('/', get_index),
     web.get('/plot', get_index),
+    web.get('/fast', get_index),
     web.static('/', build_dir),
   ])
 app.on_shutdown.append(on_shutdown)

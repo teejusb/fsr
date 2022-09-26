@@ -1,0 +1,6 @@
+/* CSS Reset */
+@import './00_reset.css';
+
+/* Page styles */
+@import './01_index.css';
+@import './02_app.css';

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from "react";
 
 // returns { emit, isWsReady, webUIDataRef, wsCallbacksRef }
 // webUIDataRef tracks values as well as thresholds.
@@ -18,7 +18,6 @@ const useWsConnection = ({ defaults, onCloseWs, MAX_SIZE }) => {
   // Some values such as sensor readings are stored in a mutable array in a ref so that
   // they are not subject to the React render cycle, for performance reasons.
   const webUIDataRef = useRef({
-
     // A history of the past 'MAX_SIZE' values fetched from the backend.
     // Used for plotting and displaying live values.
     // We use a cyclical array to save memory.
@@ -32,16 +31,19 @@ const useWsConnection = ({ defaults, onCloseWs, MAX_SIZE }) => {
   const wsRef = useRef();
   const wsCallbacksRef = useRef({});
 
-  const emit = useCallback((msg) => {
-    // App should wait for isWsReady to send messages.
-    if (!wsRef.current || !isWsReady) {
-      throw new Error("emit() called when isWsReady !== true.");
-    }
+  const emit = useCallback(
+    (msg) => {
+      // App should wait for isWsReady to send messages.
+      if (!wsRef.current || !isWsReady) {
+        throw new Error("emit() called when isWsReady !== true.");
+      }
 
-    wsRef.current.send(JSON.stringify(msg));
-  }, [isWsReady, wsRef]);
+      wsRef.current.send(JSON.stringify(msg));
+    },
+    [isWsReady, wsRef]
+  );
 
-  wsCallbacksRef.current.values = function(msg) {
+  wsCallbacksRef.current.values = function (msg) {
     const webUIData = webUIDataRef.current;
     if (webUIData.curValues.length < MAX_SIZE) {
       webUIData.curValues.push(msg.values);
@@ -51,7 +53,7 @@ const useWsConnection = ({ defaults, onCloseWs, MAX_SIZE }) => {
     }
   };
 
-  wsCallbacksRef.current.thresholds = function(msg) {
+  wsCallbacksRef.current.thresholds = function (msg) {
     // Modify thresholds array in place instead of replacing it so that animation loops can have a stable reference.
     webUIDataRef.current.curThresholds.length = 0;
     webUIDataRef.current.curThresholds.push(...msg.thresholds);
@@ -73,25 +75,25 @@ const useWsConnection = ({ defaults, onCloseWs, MAX_SIZE }) => {
     webUIDataRef.current.curThresholds.length = 0;
     webUIDataRef.current.curThresholds.push(...defaults.thresholds);
 
-    const ws = new WebSocket('ws://' + window.location.host + '/ws');
+    const ws = new WebSocket("ws://" + window.location.host + "/ws");
     wsRef.current = ws;
 
-    ws.addEventListener('open', function(ev) {
+    ws.addEventListener("open", function (ev) {
       setIsWsReady(true);
     });
-    
-    ws.addEventListener('error', function(ev) {
+
+    ws.addEventListener("error", function (ev) {
       ws.close();
     });
 
-    ws.addEventListener('close', function(ev) {
+    ws.addEventListener("close", function (ev) {
       if (!cleaningUp) {
         onCloseWs();
       }
     });
 
-    ws.addEventListener('message', function(ev) {
-      const data = JSON.parse(ev.data)
+    ws.addEventListener("message", function (ev) {
+      const data = JSON.parse(ev.data);
       const action = data[0];
       const msg = data[1];
 
@@ -108,6 +110,6 @@ const useWsConnection = ({ defaults, onCloseWs, MAX_SIZE }) => {
   }, [defaults, onCloseWs]);
 
   return { emit, isWsReady, webUIDataRef, wsCallbacksRef };
-}
+};
 
 export default useWsConnection;

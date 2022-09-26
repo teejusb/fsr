@@ -1,24 +1,21 @@
-import React from 'react';
+import React from "react";
 
-import './stylesheets/app.css';
+import useDefaults from "./helpers/usedefaults";
+import useWsConnection from "./helpers/usewsconnection";
 
-import useDefaults from './helpers/usedefaults'
-import useWsConnection from './helpers/usewsconnection'
-
-import FSRWebUI from './components/fsrwebui'
-import LoadingScreen from './components/loadingscreen'
+import FSRWebUI from "./components/fsrwebui";
+import LoadingScreen from "./components/loadingscreen";
 
 // Maximum number of historical sensor values to retain
 const MAX_SIZE = 1000;
 
 function App() {
   const { defaults, reloadDefaults } = useDefaults();
-  const {
-    emit,
-    isWsReady,
-    webUIDataRef,
-    wsCallbacksRef
-  } = useWsConnection({ defaults, onCloseWs: reloadDefaults, MAX_SIZE });
+  const { emit, isWsReady, webUIDataRef, wsCallbacksRef } = useWsConnection({
+    defaults,
+    onCloseWs: reloadDefaults,
+    MAX_SIZE,
+  });
 
   if (defaults && isWsReady) {
     return (
@@ -31,7 +28,7 @@ function App() {
       />
     );
   } else {
-    return <LoadingScreen />
+    return <LoadingScreen />;
   }
 }
 

@@ -1,11 +1,14 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from "react";
 
 // Returned `defaults` property will be undefined if the defaults are loading or reloading.
 // Call `reloadDefaults` to clear the defaults and reload from the server.
 const useDefaults = () => {
   const [defaults, setDefaults] = useState(undefined);
 
-  const reloadDefaults = useCallback(() => setDefaults(undefined), [setDefaults]);
+  const reloadDefaults = useCallback(
+    () => setDefaults(undefined),
+    [setDefaults]
+  );
 
   // Load defaults at mount and reload any time they are cleared.
   useEffect(() => {
@@ -14,16 +17,19 @@ const useDefaults = () => {
 
     const getDefaults = () => {
       clearTimeout(timeoutId);
-      fetch('/defaults').then(res => res.json()).then(data => {
-        if (!cleaningUp) {
-          setDefaults(data);
-        }
-      }).catch(reason => {
-        if (!cleaningUp) {
-          timeoutId = setTimeout(getDefaults, 1000);
-        }
-      });
-    }
+      fetch("/defaults")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cleaningUp) {
+            setDefaults(data);
+          }
+        })
+        .catch((reason) => {
+          if (!cleaningUp) {
+            timeoutId = setTimeout(getDefaults, 1000);
+          }
+        });
+    };
 
     if (!defaults) {
       getDefaults();
@@ -36,6 +42,6 @@ const useDefaults = () => {
   }, [defaults]);
 
   return { defaults, reloadDefaults };
-}
+};
 
 export default useDefaults;
