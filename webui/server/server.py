@@ -446,7 +446,6 @@ if not NO_SERIAL:
   app.add_routes([
     web.get('/', get_index),
     web.get('/plot', get_index),
-    web.get('/fast', get_index),
     web.static('/', build_dir),
   ])
 app.on_shutdown.append(on_shutdown)

@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
 import NavbarComponent from "./navbarcomponent";
 import ValueMonitors from "./ui_components/valuemonitors";
 import ValueMonitor from "./ui_components/valuemonitor";
-import FastMonitor from "./ui_components/fastmonitor";
+import FastMonitor from "./fastmonitor/fastmonitor";
 import Plot from "./ui_components/plot";
 
 const FSRWebUI = (props) => {
@@ -41,17 +41,12 @@ const FSRWebUI = (props) => {
         />
         <Switch>
           <Route exact path="/">
-            <ValueMonitors numSensors={numSensors}>
-              {[...Array(numSensors).keys()].map((index) => (
-                <ValueMonitor
-                  emit={emit}
-                  index={index}
-                  key={index}
-                  webUIDataRef={webUIDataRef}
-                  maxSize={maxSize}
-                />
-              ))}
-            </ValueMonitors>
+            <FastMonitor
+              numSensors={numSensors}
+              emit={emit}
+              webUIDataRef={webUIDataRef}
+              maxSize={maxSize}
+            />
           </Route>
           <Route path="/plot">
             <Plot
@@ -59,19 +54,6 @@ const FSRWebUI = (props) => {
               webUIDataRef={webUIDataRef}
               maxSize={maxSize}
             />
-          </Route>
-          <Route path="/fast">
-            <ValueMonitors numSensors={numSensors} className={"FastMonitor"}>
-              {[...Array(numSensors).keys()].map((index) => (
-                <FastMonitor
-                  emit={emit}
-                  index={index}
-                  key={index}
-                  webUIDataRef={webUIDataRef}
-                  maxSize={maxSize}
-                />
-              ))}
-            </ValueMonitors>
           </Route>
         </Switch>
       </Router>

@@ -1,0 +1,71 @@
+.ValueMonitor-row {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  top: 0;
+  margin: 0px;
+  padding: .25rem;
+  background-color: rgb(30, 37, 83);
+}
+
+.ValueMonitor-col {
+  display: flex;
+  flex-direction: column;
+  padding: 0px;
+}
+
+.ValueMonitor-canvas {
+  width: 95%;
+  margin: 0 auto;
+  border: 1px solid white;
+  touch-action: none;
+  flex: 1 0 auto;
+  height: 0;
+}
+
+.ValueMonitor-buttons {
+  font-size: calc(100%);
+  margin: 0 auto;
+  min-height: 12%;
+  max-width: 150px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto;
+  padding: .3rem 0 0 0;
+}
+
+.ValueMonitor-label {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 0;
+  padding: .25rem 0;
+}
+
+.ValueMonitor-buttons button {
+  font-size: calc(90%);
+  color: black;
+  background-color: lightgrey;
+  transition: color .2s ease-in-out, background-color .2s ease-in-out;
+  margin: .2rem 0 0 0;
+  padding: .25rem 0px;
+}
+
+.ValueMonitor-buttons .inc {
+  border-radius: 0 calc(12vh) calc(12vh) 0;
+  border-left: 1px grey solid;
+}
+
+.ValueMonitor-buttons .dec {
+  border-radius: calc(12vh) 0 0 calc(12vh);
+  border-right: 1px grey solid;
+}
+
+.ValueMonitor-buttons .inc:hover, .FastMonitor-buttons .inc:hover {
+  color: white;
+  background-color: green;
+}
+
+.ValueMonitor-buttons .dec:hover, .FastMonitor-buttons .dec:hover {
+  color: white;
+  background-color: red;
+}

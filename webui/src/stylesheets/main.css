@@ -4,3 +4,6 @@
 /* Page styles */
 @import './01_index.css';
 @import './02_app.css';
+@import './03_valuemonitor.css';
+@import './04_plot.css';
+@import './05_fastmonitor.css';

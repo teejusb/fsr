@@ -12,17 +12,12 @@ const NavbarComponent = (props) => {
   return (
     <Navbar bg="light">
       <Navbar.Brand as={Link} to="/">
-        FSR UI
+        New FSR UI
       </Navbar.Brand>
       <Nav>
         <Nav.Item>
           <Nav.Link as={Link} to="/plot">
             Data Plot
-          </Nav.Link>
-        </Nav.Item>
-        <Nav.Item>
-          <Nav.Link as={Link} to="/fast">
-            New UI
           </Nav.Link>
         </Nav.Item>
       </Nav>

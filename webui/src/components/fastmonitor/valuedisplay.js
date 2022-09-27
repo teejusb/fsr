@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useEffect, useCallback } from "react";
 
 import Form from "react-bootstrap/Form";
 import Col from "react-bootstrap/Col";
 
 // An interactive display of the current values obtained by the backend.
-// Also has functionality to manipulate thresholds.
-const FastMonitor = (props) => {
+const ValueDisplay = (props) => {
   const { emit, index, webUIDataRef, maxSize } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
@@ -23,22 +22,6 @@ const FastMonitor = (props) => {
     },
     [curThresholds, emit, index]
   );
-
-  const Decrement = (num) => {
-    const val = curThresholds[index] - num;
-    if (val >= 0) {
-      curThresholds[index] = val;
-      EmitValue(val);
-    }
-  };
-
-  const Increment = (num) => {
-    const val = curThresholds[index] + num;
-    if (val <= 1023) {
-      curThresholds[index] = val;
-      EmitValue(val);
-    }
-  };
 
   useEffect(() => {
     let requestId;
@@ -62,7 +45,6 @@ const FastMonitor = (props) => {
       .getComputedStyle(document.body)
       .getPropertyValue("font-family");
     const valueLabel = valueLabelRef.current;
-    const thresholdLabel = thresholdLabelRef.current;
 
     // cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact)
     const minFrameDurationMs = 1000 / 60.1;
@@ -139,8 +121,7 @@ const FastMonitor = (props) => {
       );
 
       // Threshold Label
-      thresholdLabel.innerText = curThresholds[index];
-      ctx.font = "30px " + bodyFontFamily;
+      ctx.font = "5rem " + bodyFontFamily;
       ctx.fillStyle = "black";
       if (curThresholds[index] > 990) {
         ctx.textBaseline = "top";
@@ -164,31 +145,36 @@ const FastMonitor = (props) => {
     };
   }, [EmitValue, curThresholds, curValues, index, webUIDataRef, maxSize]);
 
+  const updateThreshold = (e) => {
+    const val = parseInt(e.target.value);
+    if (e.keyCode === 13 && val >= 0 && val <= 1023) {
+      curThresholds[index] = val;
+      EmitValue(val);
+      e.target.value = val;
+    }
+  };
+
   return (
-    <Col className="FastMonitor-col">
-      <div className="FastMonitor-buttons">
-        <button className="dec" onClick={() => Decrement(5)}>
-          -5
-        </button>
-        <button className="inc" onClick={() => Increment(5)}>
-          +5
-        </button>
-        <button className="dec" onClick={() => Decrement(1)}>
-          -1
-        </button>
-        <button className="inc" onClick={() => Increment(1)}>
-          +1
-        </button>
+    <Col className="ValueMonitor-col">
+      <div className="threshold-wrapper">
+        Threshold:
+        <input
+          type="text"
+          className="ValueMonitor-label"
+          defaultValue={curThresholds[index]}
+          onKeyDown={(e) => updateThreshold(e)}
+          ref={thresholdLabelRef}
+        />
       </div>
-      <Form.Label className="FastMonitor-label" ref={thresholdLabelRef}>
-        0
-      </Form.Label>
-      <Form.Label className="FastMonitor-label" ref={valueLabelRef}>
-        0
-      </Form.Label>
-      <canvas className="FastMonitor-canvas" ref={canvasRef} />
+      <div className="num-wrapper">
+        Value:
+        <Form.Label className="ValueMonitor-label" ref={valueLabelRef}>
+          0
+        </Form.Label>
+      </div>
+      <canvas className="ValueMonitor-canvas" ref={canvasRef} />
     </Col>
   );
 };
 
-export default FastMonitor;
+export default ValueDisplay;

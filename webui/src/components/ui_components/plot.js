@@ -215,7 +215,11 @@ const Plot = (props) => {
 
   return (
     <header className="App-header">
-      <Container fluid style={{ border: "1px solid white", height: "100vh" }}>
+      <Container
+        className="plot-wrapper"
+        fluid
+        style={{ border: "1px solid white", height: "100vh" }}
+      >
         <Row>
           <Col style={{ height: "9vh", paddingTop: "2vh" }}>
             <span>Display: </span>
