@@ -16,15 +16,37 @@
   display: grid;
 }
 
+.threshold-wrapper {
+  text-align: center;
+  font-size: calc(100%);
+  padding-top: .25rem;
+
+  .ValueMonitor-label {
+    text-align: center;
+    font-size: 2rem;
+    padding: 0px;
+  }
+}
+
 .FastMonitor-buttons {
   display: grid;
   grid-template-columns: auto auto;
   width: 100%;
   padding: 3% 5%;
-}
 
-.FastMonitor-buttons button {
-  transition: background-color .2s ease-in-out, color .2s ease-in-out;
+  button {
+    transition: background-color .2s ease-in-out, color .2s ease-in-out;
+  }
+
+  .inc:hover {
+    color: white;
+    background-color: green;
+  }
+
+  .dec:hover {
+    color: white;
+    background-color: red;
+  }
 }
 
 .num-wrapper {
@@ -32,21 +54,9 @@
   justify-content: space-between;
   align-items: center;
   padding: .25rem .5rem;
-}
 
-.num-wrapper .ValueMonitor-label {
-  padding: 0 0 0 .5rem;
-  text-align: left;
-}
-
-.threshold-wrapper {
-  text-align: center;
-  font-size: calc(100%);
-  padding-top: .25rem;
-}
-
-.threshold-wrapper .ValueMonitor-label {
-  text-align: center;
-  font-size: 2rem;
-  padding: 0px;
+  .ValueMonitor-label {
+    padding: 0 0 0 .5rem;
+    text-align: left;
+  }
 }

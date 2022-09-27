@@ -3,8 +3,6 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
 
 import NavbarComponent from "./navbarcomponent";
-import ValueMonitors from "./ui_components/valuemonitors";
-import ValueMonitor from "./ui_components/valuemonitor";
 import FastMonitor from "./fastmonitor/fastmonitor";
 import Plot from "./ui_components/plot";
 

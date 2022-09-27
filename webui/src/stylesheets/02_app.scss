@@ -21,19 +21,6 @@ html * {
   -ms-user-select: none; /* Internet Explorer/Edge */
 }
 
-.App-header .container-fluid {
-  max-height: 100%;
-  padding: 0px;
-}
-
-.navbar {
-  height: 4vh;
-}
-
-.navbar * {
-  font-family: 'Bebas Neue'
-}
-
 .App-header {
   background-color: #282c34;
   height: 96vh;
@@ -43,6 +30,18 @@ html * {
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+
+  .container-fluid {
+    max-height: 100%;
+    padding: 0px;
+  }
+}
+
+.navbar {
+  height: 4vh;
+  * {
+    font-family: 'Bebas Neue'
+  }
 }
 
 .App-link {
