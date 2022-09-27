@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
 
 import NavbarComponent from "./navbarcomponent";
-import FastMonitor from "./fastmonitor/fastmonitor";
+import Monitor from "./ui_components/monitor";
 import Plot from "./ui_components/plot";
 
 const FSRWebUI = (props) => {
@@ -39,7 +39,7 @@ const FSRWebUI = (props) => {
         />
         <Switch>
           <Route exact path="/">
-            <FastMonitor
+            <Monitor
               numSensors={numSensors}
               emit={emit}
               webUIDataRef={webUIDataRef}

@@ -1,19 +1,33 @@
-.value-wrapper {
+.monitor-label {
   width: 100%;
-  display: flex;
-  height: 81%;
-  position: absolute;
-  bottom: 0px;
-  padding: 0 1% 1% 1%;
-  background-color: rgb(30, 37, 83);
+  text-align: center;
+  margin-bottom: 0;
+  padding: .25rem 0;
 }
 
-.button-wrapper {
-  min-height: 15%;
-  width: 100vw;
-  position: absolute;
-  top: 4vh;
-  display: grid;
+.monitor-col {
+  display: flex;
+  flex-direction: column;
+  padding: 0px;
+}
+
+.monitor-canvas {
+  width: 95%;
+  margin: 0 auto;
+  border: 1px solid white;
+  touch-action: none;
+  flex: 1 0 auto;
+  height: 0;
+}
+
+.monitor-row {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  top: 0;
+  margin: 0px;
+  padding: .25rem;
+  background-color: rgb(30, 37, 83);
 }
 
 .threshold-wrapper {
@@ -21,18 +35,19 @@
   font-size: calc(100%);
   padding-top: .25rem;
 
-  .ValueMonitor-label {
+  .monitor-label {
     text-align: center;
     font-size: 2rem;
     padding: 0px;
   }
 }
 
-.FastMonitor-buttons {
+.monitor-buttons {
   display: grid;
   grid-template-columns: auto auto;
   width: 100%;
   padding: 3% 5%;
+  min-height: 15%;
 
   button {
     transition: background-color .2s ease-in-out, color .2s ease-in-out;
@@ -55,8 +70,14 @@
   align-items: center;
   padding: .25rem .5rem;
 
-  .ValueMonitor-label {
+  .monitor-label {
     padding: 0 0 0 .5rem;
     text-align: left;
+  }
+}
+
+.App-header {
+  .row {
+    flex-wrap: nowrap;
   }
 }
