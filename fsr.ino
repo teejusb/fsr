@@ -10,6 +10,8 @@
   #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
+// Uncomment this line to make it so the built-in LED blinks when input is detected (Teensy only)
+// #define ENABLE_TEENSY_LED_BLINK
 
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
@@ -22,9 +24,15 @@
   }
   void ButtonPress(uint8_t button_num) {
     Joystick.button(button_num, 1);
+    #if defined(ENABLE_TEENSY_LED_BLINK)
+      digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+    #endif
   }
   void ButtonRelease(uint8_t button_num) {
     Joystick.button(button_num, 0);
+    #if defined(ENABLE_TEENSY_LED_BLINK)
+      digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+    #endif
   }
 #else
   #include <Keyboard.h>
@@ -574,6 +582,10 @@ void setup() {
 	  SET_BIT(ADCSRA, ADPS2);
 	  CLEAR_BIT(ADCSRA, ADPS1);
 	  CLEAR_BIT(ADCSRA, ADPS0);
+  #endif
+  
+  #if defined(ENABLE_TEENSY_LED_BLINK)
+    pinMode(LED_BUILTIN, OUTPUT);
   #endif
 }
 
