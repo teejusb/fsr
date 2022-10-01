@@ -1,5 +1,151 @@
 #include <inttypes.h>
 
+// BEGIN DOM'S FASTLED SETUP
+#include <FastLED.h>
+#define NUM_LEDS 4
+#define DATA_PIN 10
+#define CLOCK_PIN 11
+CRGB leds[NUM_LEDS];
+
+// This is a map of panel leds. The order of the array cooresponds to the 
+// button number while the value is the FastLED LED number in the strip.
+// Button numbers start at 1 so 0 isn't used, which is why the underglow is there.
+int16_t PANEL_LED[] = {
+  9, // Underglow, not used
+  0,
+  1,
+  2,
+  3
+ };
+ const size_t kNumLeds = sizeof(PANEL_LED) / sizeof(int16_t);
+
+// Set the color profile for the lights
+int COLOR_PROFILE = 0;
+
+// Re-usable palletes
+CRGB ALL_WHITE[10] = {CRGB::Blue,   CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White, CRGB::White};
+CRGB ALL_BLACK[10] = {CRGB::Black,  CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black};
+CRGB ALL_RED[10]   = {CRGB::Red,    CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red,   CRGB::Red};
+CRGB ALL_BLUE[10]  = {CRGB::Blue,   CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue,  CRGB::Blue};
+CRGB ALL_GREEN[10] = {CRGB::Green,  CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green, CRGB::Green};
+CRGB ALL_GOLD[10]  = {CRGB::Gold,   CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold,  CRGB::Gold};
+CRGB ALL_PINK[10]  = {CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink,CRGB::DeepPink};
+
+// Idle lights, light up when the panel isn't being pressed
+CRGB IDLE_COLORS[][10] = {
+               // Underglow,       Left,             Up,               Down,             Right,            Up-Left,          Up-Right,         Down-Right,       Center,           Down Left
+  /* 0  Test   */ {CRGB::Blue,     CRGB::Gold,       CRGB::Red,        CRGB::Green,      CRGB::Purple,     CRGB::SkyBlue,    CRGB::Blue,       CRGB::Tomato,     CRGB::Green,      CRGB::Pink},
+  /* 1  ITG    */ {CRGB::Blue,     CRGB::Blue,       CRGB::Red,        CRGB::Red,        CRGB::Blue,       CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* 2  DDR    */ {CRGB::Blue,     CRGB::DeepSkyBlue,CRGB::DeepPink,   CRGB::DeepPink,   CRGB::DeepSkyBlue,CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* 3  Brazil */ {CRGB::Blue,     CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,},
+  /* 4  Frozen */ {CRGB::Blue,     CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White,      CRGB::White},
+  /* 5  Italy  */ {CRGB::Blue,     CRGB::Green,      CRGB::White,      CRGB::White,      CRGB::Red,        CRGB::Green,      CRGB::Red,        CRGB::Red,        CRGB::White,      CRGB::Green},
+  /* 6  One    */ {CRGB::Black,    CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::White},
+  /* 7  Prncss */ {CRGB::Magenta,  CRGB::MediumPurple,CRGB::MediumPurple,CRGB::MediumPurple,CRGB::MediumPurple,CRGB::Magenta,CRGB::Magenta,    CRGB::Magenta,    CRGB::Magenta,    CRGB::Magenta},
+  /* 8  Navi   */ {CRGB::Blue,     CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green,      CRGB::Green},
+  /* 9  USA    */ {CRGB::Blue,     CRGB::Red,        CRGB::Red,        CRGB::Red,        CRGB::Red,        CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue},
+  /* 10 Y->BLK */ ALL_GOLD,
+  /* 11 R->BLK */ ALL_RED,
+  /* 12 B->BLK */ ALL_BLUE,
+  /* 13 G->BLK */ ALL_GREEN,
+  /* 14 W->BLK */ ALL_WHITE,
+  /* 15 BLK->W */ ALL_BLACK,
+  /* 16 BLK->R */ ALL_BLACK,
+  /* 17 BLK->B */ ALL_BLACK,
+  /* 18 BLK->G */ ALL_BLACK,
+  /* 19 BLK->DR*/ ALL_BLACK,
+  /* 20 BLK->IT*/ ALL_BLACK,
+  /* 21 RED->BL*/ ALL_RED,
+  /* 22 BLU->RD*/ ALL_BLUE,
+  /* 23 RED->GN*/ ALL_RED,
+  /* 24 GRE->RD*/ ALL_GREEN,
+  /* 25 YEL->RD*/ ALL_GOLD,
+  /* 26 BLU->YEL*/ ALL_BLUE,
+  /* 27 YEL->BLU*/ ALL_GOLD,
+  /* 28 BLU->GRN*/ ALL_BLUE,
+  /* 29 GRN->BLU*/ ALL_GREEN,
+  /* 30 YEL->GRN*/ ALL_GOLD,
+  /* 31 GRN->YEL*/ ALL_GREEN,
+  /* 32 BLU->PNK*/ ALL_BLUE,
+  /* 33 PNK->BLU*/ ALL_PINK,
+  /* 34 YEL->PNK*/ ALL_GOLD,
+  /* 35 PNK->YEL*/ ALL_PINK,
+  /* 36 WHI->RED*/ ALL_WHITE,
+  /* 37 WHI->BLU*/ ALL_WHITE,
+  /* 38 WHI->GRN*/ ALL_WHITE,
+  /* 39 WHI->YEL*/ ALL_WHITE,
+  /* 40 WHI->PNK*/ ALL_WHITE,
+  /* 41 RED->WHI*/ ALL_RED,
+  /* 42 BLU->WHI*/ ALL_BLUE,
+  /* 43 GRN->WHI*/ ALL_GREEN,
+  /* 44 YEL->WHI*/ ALL_GOLD,
+  /* 45 PNK->WHI*/ ALL_PINK,
+};
+
+// Active lights, light up when the panel is pressed
+CRGB ACTIVE_COLORS[][10] = {
+               // Underglow,       Left,             Up,               Down,             Right,            Up-Left,          Up-Right,         Down-Right,       Center,           Down Left
+  /* 0  Test   */ ALL_WHITE, 
+  /* 1  ITG    */ ALL_WHITE, 
+  /* 2  DDR    */ ALL_WHITE, 
+  /* 3  Brazil */ ALL_WHITE, 
+  /* 4  Frozen */ {CRGB::Black,    CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue}, 
+  /* 5  Italy  */ {CRGB::Blue,     CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue,       CRGB::Blue}, 
+  /* 6  One    */ ALL_WHITE, 
+  /* 7  Prncss */ {CRGB::Blue,     CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold,       CRGB::Gold}, 
+  /* 8  Navi   */ ALL_WHITE,
+  /* 9  USA    */ ALL_WHITE,
+  /* 10 Y->BLK */ ALL_BLACK,
+  /* 11 R->BLK */ ALL_BLACK,
+  /* 12 B->BLK */ ALL_BLACK,
+  /* 13 G->BLK */ ALL_BLACK,
+  /* 14 W->BLK */ ALL_BLACK,
+  /* 15 BLK->W */ ALL_WHITE,
+  /* 16 BLK->R */ ALL_RED,
+  /* 17 BLK->B */ ALL_BLUE,
+  /* 18 BLK->G */ ALL_GREEN,
+  /* 19 BLK->DR*/ {CRGB::Blue,     CRGB::DeepSkyBlue,CRGB::DeepPink,   CRGB::DeepPink,   CRGB::DeepSkyBlue,CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* 20 BLK->IT*/ {CRGB::Blue,     CRGB::Blue,       CRGB::Red,        CRGB::Red,        CRGB::Blue,       CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black,      CRGB::Black},
+  /* 21 RED->BL*/ ALL_BLUE,
+  /* 22 BLU->RD*/ ALL_RED,
+  /* 23 RED->GN*/ ALL_GREEN,
+  /* 24 GRE->RD*/ ALL_RED,
+  /* 25 YEL->RD*/ ALL_RED,
+  /* 26 BLU->YEL*/ ALL_GOLD,
+  /* 27 YEL->BLU*/ ALL_BLUE,
+  /* 28 BLU->GRN*/ ALL_GREEN,
+  /* 29 GRN->BLU*/ ALL_BLUE,
+  /* 30 YEL->GRN*/ ALL_GREEN,
+  /* 31 GRN->YEL*/ ALL_GOLD,
+  /* 32 BLU->PNK*/ ALL_PINK,
+  /* 33 PNK->BLU*/ ALL_BLUE,
+  /* 34 YEL->PNK*/ ALL_PINK,
+  /* 35 PNK->YEL*/ ALL_GOLD,
+  /* 36 WHI->RED*/ ALL_RED,
+  /* 37 WHI->BLU*/ ALL_BLUE,
+  /* 38 WHI->GRN*/ ALL_GREEN,
+  /* 39 WHI->YEL*/ ALL_GOLD,
+  /* 40 WHI->PNK*/ ALL_PINK,
+  /* 41 RED->WHI*/ ALL_WHITE,
+  /* 42 BLU->WHI*/ ALL_WHITE,
+  /* 43 GRN->WHI*/ ALL_WHITE,
+  /* 44 YEL->WHI*/ ALL_WHITE,
+  /* 45 PNK->WHI*/ ALL_WHITE,
+};
+
+void setIdleColors() {
+  // Set each light to its idle color
+  // ... kNumSensors = number of sensors + 1 (for the underglow)
+  for( size_t k=0; k < kNumLeds; k++) {
+    int button_num = k;
+    int panel_led = PANEL_LED[button_num];
+    leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][button_num];
+  }
+  FastLED.show();
+}
+
+// END DOM'S FASTLED SETUP
+
 #if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
     !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
   #define CAN_AVERAGE
@@ -10,6 +156,8 @@
   #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
+// Uncomment this line to make it so the build in LED blinks when input is detected (Teensy only)
+#define ENABLE_TEENSY_LED_BLINK
 
 #ifdef CORE_TEENSY
   // Use the Joystick library for Teensy
@@ -22,9 +170,15 @@
   }
   void ButtonPress(uint8_t button_num) {
     Joystick.button(button_num, 1);
+    #if defined(ENABLE_TEENSY_LED_BLINK)
+      digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+    #endif
   }
   void ButtonRelease(uint8_t button_num) {
     Joystick.button(button_num, 0);
+    #if defined(ENABLE_TEENSY_LED_BLINK)
+      digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+    #endif
   }
 #else
   #include <Keyboard.h>
@@ -41,7 +195,7 @@
 #endif
 
 // Default threshold value for each of the sensors.
-const int16_t kDefaultThreshold = 1000;
+const int16_t kDefaultThreshold = 15;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
@@ -60,7 +214,7 @@ uint8_t curButtonNum = 1;
 // some existing sensor pins so if you see some weird behavior it might be
 // because of this. Uncomment the following line to enable the feature.
 
-// #define ENABLE_LIGHTS
+#define ENABLE_LIGHTS
 
 // We don't want to use digital pins 0 and 1 as they're needed for Serial
 // communication so we start curLightPin from 2.
@@ -159,7 +313,7 @@ class SensorState {
   SensorState()
       : num_sensors_(0),
         #if defined(ENABLE_LIGHTS)
-        kLightsPin(curLightPin++),
+          kLightsPin(curLightPin++),
         #endif
         buttonNum(curButtonNum++) {
     for (size_t i = 0; i < kMaxSharedSensors; ++i) {
@@ -217,6 +371,9 @@ class SensorState {
     bool all_evaluated = (sensor_index == num_sensors_ - 1);
 
     if (all_evaluated) {
+      // My pad has 8 sensors with 4 panels (2 each panel) and because of the way buttons are registered, 
+      // it always starts with joystick button 5 instead of 1. So that's why I have to subtract 4 from buttonNum.
+      int16_t panel_led = PANEL_LED[buttonNum - 4 ]; // buttonNum is 5 for first (should be 1)
       switch (combined_state_) {
         case SensorState::OFF:
           {
@@ -233,6 +390,12 @@ class SensorState {
               combined_state_ = SensorState::ON;
               #if defined(ENABLE_LIGHTS)
                 digitalWrite(kLightsPin, HIGH);
+                // Light on
+                // Set panel LED to active color
+                leds[panel_led] = ACTIVE_COLORS[COLOR_PROFILE][buttonNum];
+                // Do the underglow too
+                // leds[0] = ACTIVE_COLORS[COLOR_PROFILE][0];
+                FastLED.show();
               #endif
             }
           }
@@ -252,6 +415,12 @@ class SensorState {
               combined_state_ = SensorState::OFF;
               #if defined(ENABLE_LIGHTS)
                 digitalWrite(kLightsPin, LOW);
+                // Light off
+                // Reset panel LED back to idle color (or off, if black)
+                leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][buttonNum];
+                // Do the underglow too
+                // leds[0] = IDLE_COLORS[COLOR_PROFILE][0];
+                FastLED.show();
               #endif
             }
           }
@@ -447,21 +616,22 @@ class Sensor {
 // is controlled by the kMaxSharedSensors constant at the top of this file, but
 // can be modified as needed.
 //
-// SensorState state1;
-// Sensor kSensors[] = {
-//   Sensor(A0, &state1),
-//   Sensor(A1, &state1),
-//   Sensor(A2),
-//   Sensor(A3),
-//   Sensor(A4),
-// };
-
+SensorState state1;
+SensorState state2;
+SensorState state3;
+SensorState state4;
 Sensor kSensors[] = {
-  Sensor(A0),
-  Sensor(A1),
-  Sensor(A2),
-  Sensor(A3),
+  // Facing forward on the pad...
+  Sensor(A5, &state4), // left panel, front sensor
+  Sensor(A6, &state4), // left panel, rear sensor
+  Sensor(A2, &state2), // down panel, left sensor
+  Sensor(A3, &state2), // down panel, right sensor
+  Sensor(A4, &state3), // up panel, right sensor
+  Sensor(A7, &state3), // up panel, left sensor
+  Sensor(A0, &state1), // right panel, rear sensor
+  Sensor(A1, &state1), // right panel, front sensor
 };
+
 const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
 /*===========================================================================*/
@@ -493,12 +663,41 @@ class SerialProcessor {
         case 'T':
           PrintThresholds();
           break;
+        case 'c':
+        case 'C':
+          UpdateColorProfile(bytes_read);
+          break;
         case '0' ... '9': // Case ranges are non-standard but work in gcc
           UpdateAndPrintThreshold(bytes_read);
         default:
           break;
       }
     }  
+  }
+
+  void PrintColorProfile() {
+    Serial.print("c");
+    Serial.print(" ");
+    Serial.print(COLOR_PROFILE);
+    Serial.print("\n");
+  }
+
+  void UpdateColorProfile(size_t bytes_read) {
+    // Need to specify:
+    // C + color profile.
+    // e.g. C3 (selects third color profile)
+
+    // If the value isn't there (just "C") only print the profile
+    if (bytes_read < 2 || bytes_read > 5) { 
+      PrintColorProfile(); 
+      return;
+    }
+    // Update the COLOR_PROFILE variable with whatever the value is
+    COLOR_PROFILE = strtoul(buffer_ + 1, nullptr, 10);
+    // Print it out
+    PrintColorProfile();
+    // Set the new idle colors
+    setIdleColors();
   }
 
   void UpdateAndPrintThreshold(size_t bytes_read) {
@@ -560,6 +759,11 @@ unsigned long lastSend = 0;
 long loopTime = -1;
 
 void setup() {
+  // Add the LEDs
+  FastLED.addLeds<P9813, DATA_PIN, CLOCK_PIN , RGB>(leds, NUM_LEDS).setCorrection(TypicalSMD5050).setTemperature(CarbonArc);   
+  // Set each light to its idle color on start
+  setIdleColors();
+
   serialProcessor.Init(kBaudRate);
   ButtonStart();
   for (size_t i = 0; i < kNumSensors; ++i) {
@@ -574,6 +778,10 @@ void setup() {
 	  SET_BIT(ADCSRA, ADPS2);
 	  CLEAR_BIT(ADCSRA, ADPS1);
 	  CLEAR_BIT(ADCSRA, ADPS0);
+  #endif
+
+  #if defined(ENABLE_TEENSY_LED_BLINK)
+    pinMode(LED_BUILTIN, OUTPUT);
   #endif
 }
 

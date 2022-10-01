@@ -16,14 +16,14 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "COM5"
 HTTP_PORT = 5000
 
 # Event to tell the reader and writer threads to exit.
 thread_stop_event = threading.Event()
 
 # Amount of sensors.
-num_sensors = 4
+num_sensors = 8
 
 # Initialize sensor ids.
 sensor_numbers = range(num_sensors)
@@ -32,6 +32,8 @@ sensor_numbers = range(num_sensors)
 # emulate the serial device instead of actually connecting to one.
 NO_SERIAL = False
 
+# Set default color profile in the UI
+CURRENT_COLOR_PROFILE = 0
 
 class ProfileHandler(object):
   """
@@ -291,6 +293,15 @@ def update_threshold(values, index):
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
 
+def update_color_profile(value):
+  global CURRENT_COLOR_PROFILE
+  CURRENT_COLOR_PROFILE = value
+  try:
+    # Let the writer thread handle updating color.
+    color_cmd = f"C{value}\n"
+    serial_handler.write_queue.put(color_cmd, block=False)
+  except queue.Full:
+    logger.error('Could not update color. Queue full.')
 
 def add_profile(profile_name, thresholds):
   profile_handler.AddProfile(profile_name, thresholds)
@@ -318,7 +329,8 @@ async def get_defaults(request):
   return json_response({
     'profiles': profile_handler.GetProfileNames(),
     'cur_profile': profile_handler.GetCurrentProfile(),
-    'thresholds': profile_handler.GetCurThresholds()
+    'thresholds': profile_handler.GetCurThresholds(),
+    'color_profile': int(CURRENT_COLOR_PROFILE)
   })
 
 
@@ -394,6 +406,9 @@ async def get_ws(request):
             elif action == 'change_profile':
               profile_name, = data[1:]
               change_profile(profile_name)
+            elif action == 'update_color_profile':
+              profile_name, = data[1:]
+              update_color_profile(profile_name)
           elif msg.type == WSMsgType.CLOSE:
             connected = False
             continue
