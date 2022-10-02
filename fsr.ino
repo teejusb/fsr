@@ -12,10 +12,10 @@ CRGB leds[NUM_LEDS];
 // Button numbers start at 1 so 0 isn't used, which is why the underglow is there.
 int16_t PANEL_LED[] = {
   9, // Underglow, not used
-  0,
+  3,
   1,
   2,
-  3
+  0
  };
  const size_t kNumLeds = sizeof(PANEL_LED) / sizeof(int16_t);
 
