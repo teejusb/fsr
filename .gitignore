@@ -94,3 +94,10 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+package.json
+server/server.py
+server/profiles.txt
+
+node_modules/
+build/
