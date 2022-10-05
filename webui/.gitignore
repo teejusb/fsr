@@ -26,3 +26,4 @@ venv
 __pycache__
 
 server/profiles.txt
+webui/server/server.py
