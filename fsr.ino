@@ -373,7 +373,8 @@ class SensorState {
     if (all_evaluated) {
       // My pad has 8 sensors with 4 panels (2 each panel) and because of the way buttons are registered, 
       // it always starts with joystick button 5 instead of 1. So that's why I have to subtract 4 from buttonNum.
-      int16_t panel_led = PANEL_LED[buttonNum - 4 ]; // buttonNum is 5 for first (should be 1)
+      int16_t panel_led = PANEL_LED[buttonNum - 4]; // buttonNum is 5 for first (should be 1)
+      int16_t buttonNumForColorProfile = buttonNum - 4; // buttonNum is 5 for first (should be 1)
       switch (combined_state_) {
         case SensorState::OFF:
           {
@@ -392,7 +393,7 @@ class SensorState {
                 digitalWrite(kLightsPin, HIGH);
                 // Light on
                 // Set panel LED to active color
-                leds[panel_led] = ACTIVE_COLORS[COLOR_PROFILE][buttonNum];
+                leds[panel_led] = ACTIVE_COLORS[COLOR_PROFILE][buttonNumForColorProfile];
                 // Do the underglow too
                 // leds[0] = ACTIVE_COLORS[COLOR_PROFILE][0];
                 FastLED.show();
@@ -417,7 +418,7 @@ class SensorState {
                 digitalWrite(kLightsPin, LOW);
                 // Light off
                 // Reset panel LED back to idle color (or off, if black)
-                leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][buttonNum];
+                leds[panel_led] = IDLE_COLORS[COLOR_PROFILE][buttonNumForColorProfile];
                 // Do the underglow too
                 // leds[0] = IDLE_COLORS[COLOR_PROFILE][0];
                 FastLED.show();
