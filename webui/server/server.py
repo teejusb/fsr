@@ -186,7 +186,7 @@ class SerialHandler(object):
       logger.error('Could not set thresholds. Queue full.')
     except serial.SerialException as e:
       self.ser = None
-      logger.exception('Error opening serial: %s', e)
+      logger.error('Error opening serial: %s', e)
 
   def Read(self):
     def ProcessValues(values):
@@ -247,7 +247,7 @@ class SerialHandler(object):
         except queue.Full as e:
           logger.error('Could not fetch new values. Queue full.')
         except serial.SerialException as e:
-          logger.error('Error reading data: ', e)
+          logger.error('Error reading data: %s', e)
           self.Open()
 
   def Write(self):
@@ -276,7 +276,7 @@ class SerialHandler(object):
         try:
           self.ser.write(command.encode())
         except serial.SerialException as e:
-          logger.error('Error writing data: ', e)
+          logger.error('Error writing data: %s', e)
           # Emit current thresholds since we couldn't update the values.
           broadcast(['thresholds',
             {'thresholds': self.profile_handler.GetCurThresholds()}])
@@ -416,6 +416,8 @@ async def get_ws(request):
           receive_task = asyncio.create_task(ws.receive())
   except ConnectionResetError:
     pass
+  except Exception as e:
+    print(f"Exception in get_ws: {e}")
   finally:
     request.app['websockets'].remove(ws)
     with out_queues_lock:
