@@ -5,7 +5,13 @@ import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 
 const Dropdown = (props) => {
-  const { profiles, emit, activeProfile, webUIDataRef } = props;
+  const {
+    profiles,
+    emit,
+    activeProfile,
+    webUIDataRef,
+    toggleModal
+  } = props;
 
   const AddProfile = (e) => {
     // Only add a profile on the enter key.
@@ -17,18 +23,18 @@ const Dropdown = (props) => {
     return false;
   };
 
-  const RemoveProfile = (e) => {
-    // The X button is inside the Change Profile button, so stop the event from bubbling up and triggering the ChangeProfile handler.
-    e.stopPropagation();
-    // Strip out the "X " added by the button.
-    const profile_name = e.target.parentNode.innerText.replace("X ", "");
-    emit(["remove_profile", profile_name]);
-  };
+  // const RemoveProfile = (e) => {
+  //   // The X button is inside the Change Profile button, so stop the event from bubbling up and triggering the ChangeProfile handler.
+  //   e.stopPropagation();
+  //   // Strip out the "X " added by the button.
+  //   const profile_name = e.target.parentNode.innerText.replace("X ", "");
+  //   emit(["remove_profile", profile_name]);
+  // };
 
   const ChangeProfile = (e) => {
     // Strip out the "X " added by the button.
-    const profile_name = e.target.innerText.replace("X ", "");
-    emit(["change_profile", profile_name]);
+    const profileName = e.target.innerText.replace("X ", "");
+    emit(["change_profile", profileName]);
   };
 
   return (
@@ -42,10 +48,10 @@ const Dropdown = (props) => {
               onClick={ChangeProfile}
               active
             >
-              <Button variant="light" onClick={RemoveProfile}>
+              <Button variant="light" onClick={() => toggleModal(profile)}>
                 X
-              </Button>{" "}
-              {profile}
+              </Button>
+              {" " + profile}
             </NavDropdown.Item>
           );
         } else {
@@ -55,10 +61,10 @@ const Dropdown = (props) => {
               style={{ paddingLeft: "0.5rem" }}
               onClick={ChangeProfile}
             >
-              <Button variant="light" onClick={RemoveProfile}>
+              <Button variant="light" onClick={() => toggleModal(profile)}>
                 X
-              </Button>{" "}
-              {profile}
+              </Button>
+              {" " + profile}
             </NavDropdown.Item>
           );
         }

@@ -16,7 +16,7 @@ from aiohttp.web import json_response
 logger = logging.getLogger(__name__)
 
 # Edit this to match the serial port name shown in Arduino IDE
-SERIAL_PORT = "COM7"
+SERIAL_PORT = "COM5"
 HTTP_PORT = 5000
 
 # Event to tell the reader and writer threads to exit.

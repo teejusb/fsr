@@ -44,6 +44,61 @@ html * {
   }
 }
 
+.delete-modal {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+
+  .modal-block {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: black;
+    opacity: .7;
+    z-index: 1;
+  }
+  .modal-body {
+    position: fixed;
+    top: 30%;
+    bottom: 40%;
+    left: 30%;
+    right: 30%;
+    background-color: rgb(41, 18, 83);
+    color: white;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    border: 5px rgb(85, 85, 85) solid;
+    border-radius: 30px;
+    
+    h4 {
+      font-size: 2rem;
+      font-family: 'Bebas Neue'
+    }
+
+    span {
+      display: flex;
+      justify-content: space-between;
+      max-width: 200px;
+      margin: 0 auto;
+      width: 80%;
+      
+      button {
+        margin: 15px;
+        font-size: 2rem;
+        padding: 0px;
+        width: 40%;
+      }
+    }
+  }
+}
+
 .App-link {
   color: #61dafb;
 }
