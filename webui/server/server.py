@@ -207,7 +207,7 @@ class SerialHandler(object):
         if cur != act:
           self.profile_handler.UpdateThresholds(i, act)
 
-    while not thread_stop_event.isSet():
+    while not thread_stop_event.is_set():
       if NO_SERIAL:
         offsets = [int(normalvariate(0, num_sensors+1)) for _ in range(num_sensors)]
         self.no_serial_values = [
@@ -251,7 +251,7 @@ class SerialHandler(object):
           self.Open()
 
   def Write(self):
-    while not thread_stop_event.isSet():
+    while not thread_stop_event.is_set():
       try:
         command = self.write_queue.get(timeout=1)
       except queue.Empty:
@@ -336,14 +336,14 @@ async def get_defaults(request):
 
 out_queues = set()
 out_queues_lock = threading.Lock()
-main_thread_loop = asyncio.get_event_loop()
+loop = None
 
 
 def broadcast(msg):
   with out_queues_lock:
     for q in out_queues:
       try:
-        main_thread_loop.call_soon_threadsafe(q.put_nowait, msg)
+        loop.call_soon_threadsafe(q.put_nowait, msg)
       except asyncio.queues.QueueFull:
         pass
 
@@ -438,6 +438,9 @@ async def get_index(request):
   return web.FileResponse(os.path.join(build_dir, 'index.html'))
 
 async def on_startup(app):
+  global loop
+  loop = asyncio.get_event_loop()
+
   profile_handler.MaybeLoad()
 
   read_thread = threading.Thread(target=serial_handler.Read)
