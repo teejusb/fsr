@@ -1,6 +1,6 @@
 # Teejusb's FSR Guide
 A complete software package for FSR dance pads.  
-Join the ![Discord](https://discord.com/invite/RamvtwuEF2) for any questions/suggestions
+Join the [![Discord](https://img.shields.io/discord/778312862425939998?color=5865F2&label=Discord&logo=discord&logoColor=white)](https://discord.com/invite/RamvtwuEF2) for any questions/suggestions
 
 ## Features
 - React web UI to customize sensitivity 
