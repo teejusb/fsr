@@ -7,7 +7,14 @@ import Monitor from "./ui_components/monitor";
 import Plot from "./ui_components/plot";
 
 const FSRWebUI = (props) => {
-  const { emit, defaults, webUIDataRef, wsCallbacksRef, maxSize } = props;
+  const {
+    emit,
+    defaults,
+    webUIDataRef,
+    wsCallbacksRef,
+    maxSize,
+    deviceType
+  } = props;
   const numSensors = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
@@ -28,8 +35,9 @@ const FSRWebUI = (props) => {
     };
   }, [profiles, wsCallbacksRef]);
 
+  debugger
   return (
-    <div className="App">
+    <div className={`App ${deviceType}`}>
       <Router>
         <NavbarComponent
           emit={emit}

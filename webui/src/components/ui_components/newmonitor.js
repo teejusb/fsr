@@ -6,7 +6,7 @@ import Col from "react-bootstrap/Col";
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 const NewMonitor = (props) => {
-  const { emit, index, webUIDataRef, maxSize } = props;
+  const { emit, index, webUIDataRef, maxSize, even, dir } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
@@ -242,7 +242,7 @@ const NewMonitor = (props) => {
 
   return (
     <Col className="monitor-col">
-      <div className="monitor-buttons">
+      <div className={`monitor-buttons ${even ? "even" : ""}`}>
         <button className="dec" onClick={() => changeValue(-1)}>
           -1
         </button>
@@ -263,7 +263,7 @@ const NewMonitor = (props) => {
         </button>
       </div>
       <div className="threshold-wrapper">
-        Threshold:
+        {dir} Threshold:
         <input
           type="text"
           className="monitor-label"

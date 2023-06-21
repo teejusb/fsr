@@ -19,6 +19,26 @@ html * {
   -khtml-user-select: none; /* Konqueror HTML */
   -moz-user-select: none; /* Firefox */
   -ms-user-select: none; /* Internet Explorer/Edge */
+
+  &.Mobile {
+    .monitor-canvas {
+      display: none;
+    }
+
+    .monitor-row {
+      display: grid;
+      grid-template-rows: repeat(3, auto);
+      grid-template-columns: repeat(3, auto);
+
+      .monitor-col {
+        .threshold-wrapper {
+          input {
+            width: 100%;
+          }
+        }
+      }
+    }
+  }
 }
 
 .App-header {
