@@ -4,8 +4,8 @@ import Row from "react-bootstrap/Row";
 
 import NewMonitor from "./newmonitor";
 
-const Monitor = (props) => {
-  const { numSensors, emit, webUIDataRef, maxSize } = props;
+const MonitorPage = (props) => {
+  const { numSensors, emit, webUIDataRef, maxSize, deviceType } = props;
   const INDEX_TO_DIR = {}
 
   if (numSensors === 4) {
@@ -13,7 +13,7 @@ const Monitor = (props) => {
     INDEX_TO_DIR['1'] = "DOWN";
     INDEX_TO_DIR['2'] = "UP";
     INDEX_TO_DIR['3'] = "RIGHT";
-  } else {
+  } else if (numSensors === 6) {
     INDEX_TO_DIR['0'] = "LEFT";
     INDEX_TO_DIR['1'] = "DOWN (L)";
     INDEX_TO_DIR['2'] = "DOWN (R)";
@@ -27,7 +27,8 @@ const Monitor = (props) => {
       <Row className="monitor-row">
         {[...Array(numSensors).keys()].map((index) => (
           <NewMonitor
-            dir={INDEX_TO_DIR[index]}
+            deviceType={deviceType}
+            dir={INDEX_TO_DIR[index] ? INDEX_TO_DIR[index] : index}
             emit={emit}
             index={index}
             webUIDataRef={webUIDataRef}
@@ -40,4 +41,4 @@ const Monitor = (props) => {
   );
 };
 
-export default Monitor;
+export default MonitorPage;

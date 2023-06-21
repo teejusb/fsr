@@ -6,7 +6,7 @@ import Col from "react-bootstrap/Col";
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 const NewMonitor = (props) => {
-  const { emit, index, webUIDataRef, maxSize, even, dir } = props;
+  const { emit, index, webUIDataRef, maxSize, even, dir, deviceType } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
@@ -57,72 +57,74 @@ const NewMonitor = (props) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    function getMousePos(canvas, e) {
-      const rect = canvas.getBoundingClientRect();
-      const dpi = window.devicePixelRatio || 1;
-      return {
-        x: (e.clientX - rect.left) * dpi,
-        y: (e.clientY - rect.top) * dpi,
-      };
-    }
-
-    function getTouchPos(canvas, e) {
-      const rect = canvas.getBoundingClientRect();
-      const dpi = window.devicePixelRatio || 1;
-      return {
-        x: (e.targetTouches[0].pageX - rect.left - window.pageXOffset) * dpi,
-        y: (e.targetTouches[0].pageY - rect.top - window.pageYOffset) * dpi,
-      };
-    }
-    // Change the thresholds while dragging, but only emit on release.
-    let is_drag = false;
-
-    // Mouse Events
-    canvas.addEventListener("mousedown", function (e) {
-      let pos = getMousePos(canvas, e);
-      curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
-      is_drag = true;
-    });
-
-    canvas.addEventListener("mouseup", function (e) {
-      EmitValue(curThresholds[index]);
-      thresholdLabelRef.current.value = curThresholds[index];
-      thresholdLabelRef.current.style.backgroundColor = "#ffffff";
-      is_drag = false;
-    });
-
-    canvas.addEventListener("mousemove", function (e) {
-      if (is_drag) {
+    if (deviceType === "Desktop") {
+      function getMousePos(canvas, e) {
+        const rect = canvas.getBoundingClientRect();
+        const dpi = window.devicePixelRatio || 1;
+        return {
+          x: (e.clientX - rect.left) * dpi,
+          y: (e.clientY - rect.top) * dpi,
+        };
+      }
+  
+      function getTouchPos(canvas, e) {
+        const rect = canvas.getBoundingClientRect();
+        const dpi = window.devicePixelRatio || 1;
+        return {
+          x: (e.targetTouches[0].pageX - rect.left - window.pageXOffset) * dpi,
+          y: (e.targetTouches[0].pageY - rect.top - window.pageYOffset) * dpi,
+        };
+      }
+      // Change the thresholds while dragging, but only emit on release.
+      let is_drag = false;
+  
+      // Mouse Events
+      canvas.addEventListener("mousedown", function (e) {
         let pos = getMousePos(canvas, e);
-        curThresholds[index] = Math.floor(
-          1023 - (pos.y / canvas.height) * 1023
-        );
-      }
-    });
-
-    // Touch Events
-    canvas.addEventListener("touchstart", function (e) {
-      let pos = getTouchPos(canvas, e);
-      curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
-      is_drag = true;
-    });
-
-    canvas.addEventListener("touchend", function (e) {
-      // We don't need to get the
-      EmitValue(curThresholds[index]);
-      thresholdLabelRef.current.value = curThresholds[index];
-      thresholdLabelRef.current.style.backgroundColor = "#ffffff";
-      is_drag = false;
-    });
-
-    canvas.addEventListener("touchmove", function (e) {
-      if (is_drag) {
+        curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
+        is_drag = true;
+      });
+  
+      canvas.addEventListener("mouseup", function (e) {
+        EmitValue(curThresholds[index]);
+        thresholdLabelRef.current.value = curThresholds[index];
+        thresholdLabelRef.current.style.backgroundColor = "#ffffff";
+        is_drag = false;
+      });
+  
+      canvas.addEventListener("mousemove", function (e) {
+        if (is_drag) {
+          let pos = getMousePos(canvas, e);
+          curThresholds[index] = Math.floor(
+            1023 - (pos.y / canvas.height) * 1023
+          );
+        }
+      });
+  
+      // Touch Events
+      canvas.addEventListener("touchstart", function (e) {
         let pos = getTouchPos(canvas, e);
-        curThresholds[index] = Math.floor(
-          1023 - (pos.y / canvas.height) * 1023
-        );
-      }
-    });
+        curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
+        is_drag = true;
+      });
+  
+      canvas.addEventListener("touchend", function (e) {
+        // We don't need to get the
+        EmitValue(curThresholds[index]);
+        thresholdLabelRef.current.value = curThresholds[index];
+        thresholdLabelRef.current.style.backgroundColor = "#ffffff";
+        is_drag = false;
+      });
+  
+      canvas.addEventListener("touchmove", function (e) {
+        if (is_drag) {
+          let pos = getTouchPos(canvas, e);
+          curThresholds[index] = Math.floor(
+            1023 - (pos.y / canvas.height) * 1023
+          );
+        }
+      });
+    }
 
     const setDimensions = () => {
       // Adjust DPI so that all the edges are smooth during scaling.

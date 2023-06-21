@@ -21,13 +21,9 @@ html * {
   -ms-user-select: none; /* Internet Explorer/Edge */
 
   &.Mobile {
-    .monitor-canvas {
-      display: none;
-    }
-
     .monitor-row {
       display: grid;
-      grid-template-rows: repeat(3, auto);
+      grid-template-rows: repeat(2, auto);
       grid-template-columns: repeat(3, auto);
 
       .monitor-col {
