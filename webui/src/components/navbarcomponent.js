@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 
-import Button from "react-bootstrap/Button";
 import Navbar from "react-bootstrap/Navbar";
 import Nav from "react-bootstrap/Nav";
 import Dropdown from "./dropdown";
+import DeleteModal from "./deletemodal";
 
 import { Link } from "react-router-dom";
 
@@ -19,25 +19,6 @@ const NavbarComponent = (props) => {
       modalOpen: !prevState.modalOpen,
       profileToDelete: profileName
     }))
-  }
-
-  const renderModal = () => {
-    return (
-      <div className="delete-modal">
-        <div className="modal-block" onClick={() => toggleModal(null)}></div>
-        <div className="modal-body">
-          <h4>Do you want to delete {state.profileToDelete}?</h4>
-          <span>
-            <Button variant="light" onClick={(e) => removeProfile(state.profileToDelete, e)}>
-              YES
-            </Button>
-            <Button variant="light" onClick={() => toggleModal(null)}>
-              NO
-            </Button>
-          </span>
-        </div>
-      </div>
-    )
   }
 
   const removeProfile = (profileName, e) => {
@@ -72,7 +53,13 @@ const NavbarComponent = (props) => {
           />
         </Nav>
       </Navbar>
-      {state.modalOpen && renderModal()}
+      {state.modalOpen &&
+        <DeleteModal
+          toggleModal={toggleModal}
+          removeProfile={removeProfile}
+          profile={state.profileToDelete} 
+        />
+      }
     </>
   );
 };

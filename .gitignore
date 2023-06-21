@@ -102,3 +102,4 @@ server/profiles.txt
 node_modules/
 build/
 venv/
+*.lock
