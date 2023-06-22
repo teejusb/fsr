@@ -1,10 +1,12 @@
 import React from "react";
+import { useState } from "react";
 
 import NewMonitor from "./newmonitor";
 
 const MonitorPage = (props) => {
   const { numSensors, emit, webUIDataRef, maxSize, deviceType } = props;
-  const INDEX_TO_DIR = {}
+  const INDEX_TO_DIR = {};
+  const [clickEnabled, setClickEnabled] = useState(true);
 
   if (numSensors === 4) {
     INDEX_TO_DIR['0'] = "L";
@@ -22,9 +24,13 @@ const MonitorPage = (props) => {
 
   return (
     <header className="App-header">
+      {deviceType === "Desktop" && <div className="click-wrapper"><button onClick={() => setClickEnabled(prev => !prev)}>
+        {clickEnabled ? "Disable Click Input" : "Enable Click Input"}
+      </button></div>}
       <section className="monitor-row">
         {[...Array(numSensors).keys()].map((index) => (
           <NewMonitor
+            key={index}
             deviceType={deviceType}
             dir={INDEX_TO_DIR[index] ? INDEX_TO_DIR[index] : index}
             emit={emit}
@@ -32,6 +38,7 @@ const MonitorPage = (props) => {
             webUIDataRef={webUIDataRef}
             maxSize={maxSize}
             even={numSensors % 2 === 0}
+            clickEnabled={clickEnabled}
           />
         ))}
       </section>

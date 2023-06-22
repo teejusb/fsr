@@ -3,7 +3,7 @@ import React, { useCallback, useEffect } from "react";
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 const NewMonitor = (props) => {
-  const { emit, index, webUIDataRef, maxSize, even, dir, deviceType } = props;
+  const { emit, index, webUIDataRef, maxSize, even, dir, deviceType, clickEnabled } = props;
   const thresholdLabelRef = React.useRef(null);
   const valueLabelRef = React.useRef(null);
   const canvasRef = React.useRef(null);
@@ -63,74 +63,81 @@ const NewMonitor = (props) => {
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+    function getMousePos(canvas, e) {
+      const rect = canvas.getBoundingClientRect();
+      const dpi = window.devicePixelRatio || 1;
+      return {
+        x: (e.clientX - rect.left) * dpi,
+        y: (e.clientY - rect.top) * dpi,
+      };
+    }
 
-    if (deviceType === "Desktop") {
-      function getMousePos(canvas, e) {
-        const rect = canvas.getBoundingClientRect();
-        const dpi = window.devicePixelRatio || 1;
-        return {
-          x: (e.clientX - rect.left) * dpi,
-          y: (e.clientY - rect.top) * dpi,
-        };
-      }
-  
-      function getTouchPos(canvas, e) {
-        const rect = canvas.getBoundingClientRect();
-        const dpi = window.devicePixelRatio || 1;
-        return {
-          x: (e.targetTouches[0].pageX - rect.left - window.pageXOffset) * dpi,
-          y: (e.targetTouches[0].pageY - rect.top - window.pageYOffset) * dpi,
-        };
-      }
-      // Change the thresholds while dragging, but only emit on release.
-      let is_drag = false;
-  
-      // Mouse Events
-      canvas.addEventListener("mousedown", function (e) {
+    function getTouchPos(canvas, e) {
+      const rect = canvas.getBoundingClientRect();
+      const dpi = window.devicePixelRatio || 1;
+      return {
+        x: (e.targetTouches[0].pageX - rect.left - window.pageXOffset) * dpi,
+        y: (e.targetTouches[0].pageY - rect.top - window.pageYOffset) * dpi,
+      };
+    }
+    // Change the thresholds while dragging, but only emit on release.
+    let is_drag = false;
+
+    const mouseDownFn = (e) => {
+      let pos = getMousePos(canvas, e);
+      curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
+      is_drag = true;
+    }
+
+    const mouseUpFn = (e) => {
+      EmitValue(curThresholds[index]);
+      thresholdLabelRef.current.value = curThresholds[index];
+      thresholdLabelRef.current.style.backgroundColor = "#ffffff";
+      is_drag = false;
+    }
+
+    const mouseMoveFn = (e) => {
+      if (is_drag) {
         let pos = getMousePos(canvas, e);
-        curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
-        is_drag = true;
-      });
-  
-      canvas.addEventListener("mouseup", function (e) {
-        EmitValue(curThresholds[index]);
-        thresholdLabelRef.current.value = curThresholds[index];
-        thresholdLabelRef.current.style.backgroundColor = "#ffffff";
-        is_drag = false;
-      });
-  
-      canvas.addEventListener("mousemove", function (e) {
-        if (is_drag) {
-          let pos = getMousePos(canvas, e);
-          curThresholds[index] = Math.floor(
-            1023 - (pos.y / canvas.height) * 1023
-          );
-        }
-      });
+        curThresholds[index] = Math.floor(
+          1023 - (pos.y / canvas.height) * 1023
+        );
+      }
+    }
+
+    const touchStartFn = (e) => {
+      let pos = getTouchPos(canvas, e);
+      curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
+      is_drag = true;
+    }
+
+    const touchEndFn = (e) => {
+      EmitValue(curThresholds[index]);
+      thresholdLabelRef.current.value = curThresholds[index];
+      thresholdLabelRef.current.style.backgroundColor = "#ffffff";
+      is_drag = false;
+    }
+
+    const touchMoveFn = (e) => {
+      if (is_drag) {
+        let pos = getTouchPos(canvas, e);
+        curThresholds[index] = Math.floor(
+          1023 - (pos.y / canvas.height) * 1023
+        );
+      }
+    }
+
+    if (deviceType === "Desktop" && clickEnabled) {
+      console.log("adding")
+      // Mouse Events
+      canvas.addEventListener("mousedown", mouseDownFn);
+      canvas.addEventListener("mouseup", mouseUpFn);
+      canvas.addEventListener("mousemove", mouseMoveFn);
   
       // Touch Events
-      canvas.addEventListener("touchstart", function (e) {
-        let pos = getTouchPos(canvas, e);
-        curThresholds[index] = Math.floor(1023 - (pos.y / canvas.height) * 1023);
-        is_drag = true;
-      });
-  
-      canvas.addEventListener("touchend", function (e) {
-        // We don't need to get the
-        EmitValue(curThresholds[index]);
-        thresholdLabelRef.current.value = curThresholds[index];
-        thresholdLabelRef.current.style.backgroundColor = "#ffffff";
-        is_drag = false;
-      });
-  
-      canvas.addEventListener("touchmove", function (e) {
-        if (is_drag) {
-          let pos = getTouchPos(canvas, e);
-          curThresholds[index] = Math.floor(
-            1023 - (pos.y / canvas.height) * 1023
-          );
-        }
-      });
+      canvas.addEventListener("touchstart", touchStartFn);
+      canvas.addEventListener("touchend", touchEndFn);
+      canvas.addEventListener("touchmove", touchMoveFn);
     }
 
     const setDimensions = () => {
@@ -244,10 +251,20 @@ const NewMonitor = (props) => {
     render();
 
     return () => {
+      // Mouse Events
+      canvas.removeEventListener("mousedown", mouseDownFn);
+      canvas.removeEventListener("mouseup", mouseUpFn);
+      canvas.removeEventListener("mousemove", mouseMoveFn);
+  
+      // Touch Events
+      canvas.removeEventListener("touchstart", touchStartFn);
+      canvas.removeEventListener("touchend", touchEndFn);
+      canvas.removeEventListener("touchmove", touchMoveFn);
+
       cancelAnimationFrame(requestId);
       window.removeEventListener("resize", setDimensions);
     };
-  }, [EmitValue, curThresholds, curValues, index, webUIDataRef, maxSize]);
+  }, [EmitValue, curThresholds, curValues, index, webUIDataRef, maxSize, clickEnabled]);
 
   return (
     <div className="monitor">
