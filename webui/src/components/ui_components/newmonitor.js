@@ -1,8 +1,5 @@
 import React, { useCallback, useEffect } from "react";
 
-import Form from "react-bootstrap/Form";
-import Col from "react-bootstrap/Col";
-
 // An interactive display of the current values obtained by the backend.
 // Also has functionality to manipulate thresholds.
 const NewMonitor = (props) => {
@@ -35,7 +32,6 @@ const NewMonitor = (props) => {
   };
 
   const updateThreshold = (e) => {
-    console.log(thresholdLabelRef);
     thresholdLabelRef.current.style.backgroundColor = "#d1fccf";
     const val = parseInt(e.target.value);
     if (e.keyCode === 13 && val >= 0 && val <= 1023) {
@@ -45,8 +41,19 @@ const NewMonitor = (props) => {
       thresholdLabelRef.current.style.backgroundColor = "#ffffff";
     }
 
-    if (e.keyCode === 13 && (val < 0 || val > 1024)) {
-      e.target.value = curThresholds[index];
+    if (e.keyCode === 13 && (val < 0 || val > 1023)) {
+      if (val < 0) {
+        curThresholds[index] = 0;
+        EmitValue(0);
+        e.target.value = 0;
+      }
+      
+      if (val > 1023) {
+        curThresholds[index] = 1023;
+        EmitValue(1023);
+        e.target.value = 1023;
+      }
+
       thresholdLabelRef.current.style.backgroundColor = '#ffffff'
     }
   };
@@ -243,7 +250,7 @@ const NewMonitor = (props) => {
   }, [EmitValue, curThresholds, curValues, index, webUIDataRef, maxSize]);
 
   return (
-    <Col className="monitor-col">
+    <div className="monitor">
       <div className={`monitor-buttons ${even ? "even" : ""}`}>
         <button className="dec" onClick={() => changeValue(-1)}>
           -1
@@ -265,7 +272,7 @@ const NewMonitor = (props) => {
         </button>
       </div>
       <div className="threshold-wrapper">
-        {dir} Threshold:
+        <span>{dir}:</span>
         <input
           type="text"
           className="monitor-label"
@@ -275,13 +282,12 @@ const NewMonitor = (props) => {
         />
       </div>
       <div className="num-wrapper">
-        Value:
-        <Form.Label className="monitor-label" ref={valueLabelRef}>
+        <label className="monitor-label" ref={valueLabelRef}>
           0
-        </Form.Label>
+        </label>
       </div>
       <canvas className="monitor-canvas" ref={canvasRef} />
-    </Col>
+    </div>
   );
 };
 

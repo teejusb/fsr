@@ -1,122 +1,104 @@
-.App-header {
-  .monitor-row {
-    height: 100%;
-    overflow: hidden;
-    position: relative;
-    top: 0;
-    margin: 0px;
-    padding: .25rem;
-    background-color: rgb(30, 37, 83);
-  
-    .monitor-col {
-      display: flex;
-      flex-direction: column;
-      padding: 0px;
-    
-      .monitor-buttons {
-        display: grid;
-        grid-template-columns: auto auto;
-        width: 100%;
-        padding: 3% 5%;
-        min-height: 15%;
+.monitor {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding: .25rem;
 
-        &.even {
-          .dec {
-            border-left: 1px grey solid;
-          }
-          
-          .inc {
-            border-right: 1px grey solid;
-          }
-      
-          button:first-child {
-            border-radius: 40% 0 0 0;
-            border-top: 1px grey solid;
-            border-left: 1px grey solid;
-            background-color: white;
-          }
-      
-          button:nth-child(2) {
-            border-radius: 0 40% 0 0;
-            border-top: 1px grey solid;
-            border-right: 1px grey solid;
-            background-color: white;
-          }
-      
-          button:nth-child(3), button:nth-child(4) {
-            background-color: lightgrey;
-          }
-      
-          button:nth-last-child(2) {
-            border-radius: 0 0 0 40%;
-            border-bottom: 1px grey solid;
-            border-left: 1px grey solid;
-            background-color: darkgrey;
-          }
-      
-          button:last-child {
-            border-radius: 0 0 40% 0;
-            border-bottom: 1px grey solid;
-            border-right: 1px grey solid;
-            background-color: darkgrey;
-          }
-        }
-      
-        button {
-          transition: background-color .2s ease-in-out, color .2s ease-in-out;
-        }
-      
-        .inc:hover {
-          color: white;
-          background-color: green;
-        }
-      
-        .dec:hover {
-          color: white;
-          background-color: red;
-        }
+  .monitor-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    width: 90%;
+    margin: 0 auto;
+
+    &.even {
+      button:first-child {
+        border-radius: 40% 0 0 0;
+        border-top: 1px grey solid;
+        border-left: 1px grey solid;
+        background-color: white;
       }
-    
-      .threshold-wrapper {
-        text-align: center;
-        font-size: 100%;
-        padding-top: .25rem;
-      
-        .monitor-label {
-          text-align: center;
-          font-size: 2rem;
-          padding: 0px;
-        }
+
+      button:nth-child(2) {
+        border-radius: 0 40% 0 0;
+        border-top: 1px grey solid;
+        border-right: 1px grey solid;
+        background-color: white;
       }
-    
-      .num-wrapper {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: .25rem .5rem;
-      
-        .monitor-label {
-          padding: 0 0 0 .5rem;
-          text-align: left;
-          width: 100%;
-          text-align: center;
-          margin-bottom: 0;
-          padding: .25rem 0;
-        }
+
+      button:nth-child(3), button:nth-child(4) {
+        background-color: lightgrey;
       }
-      
-      .monitor-canvas {
-        width: 95%;
-        margin: 0 auto;
-        border: 1px solid white;
-        touch-action: none;
-        flex: 1 0 auto;
-        height: 0;
+
+      button:nth-last-child(2) {
+        border-radius: 0 0 0 40%;
+        border-bottom: 1px grey solid;
+        border-left: 1px grey solid;
+        background-color: darkgrey;
+      }
+
+      button:last-child {
+        border-radius: 0 0 40% 0;
+        border-bottom: 1px grey solid;
+        border-right: 1px grey solid;
+        background-color: darkgrey;
+      }
+    }
+
+    button {
+      min-width: 3rem;
+      width: 100%;
+      font-size: 1rem;
+      font-weight: bold;
+      padding: .5rem 0;
+      transition: background-color .2s ease-in-out, color .2s ease-in-out;
+
+      &.inc:hover {
+        color: white;
+        background-color: green;
+      }
+
+      &.dec:hover {
+        color: white;
+        background-color: red;
       }
     }
   }
-  
-  .row {
-    flex-wrap: nowrap;
+
+  .threshold-wrapper {
+    padding: .5rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 80%;
+    margin: 0 auto;
+    font-weight: bold;
+
+    input.monitor-label {
+      font-size: 1.5rem;
+      background-color: white;
+      width: 3rem;
+      text-align: end;
+      margin-left: 1rem;
+    }
+  }
+
+  .num-wrapper {
+    margin: 0 auto;
+    padding-bottom: .5rem;
+
+    .monitor-label {
+      font-size: 1.3rem;
+      font-weight: bold;
+      text-align: center;
+    }
+  }
+
+  .monitor-canvas {
+    width: 95%;
+    margin: 0 auto;
+    border: 1px solid white;
+    touch-action: none;
+    flex: 1 0 auto;
+    height: 0;
   }
 }

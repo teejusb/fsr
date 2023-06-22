@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 
-import Navbar from "react-bootstrap/Navbar";
-import Nav from "react-bootstrap/Nav";
 import Dropdown from "./dropdown";
 import DeleteModal from "./deletemodal";
 
@@ -32,18 +30,15 @@ const NavbarComponent = (props) => {
 
   return (
     <>
-      <Navbar bg="light">
-        <Navbar.Brand as={Link} to="/">
-          FSR UI
-        </Navbar.Brand>
-        <Nav>
-          <Nav.Item>
-            <Nav.Link as={Link} to="/plot">
-              Data Plot
-            </Nav.Link>
-          </Nav.Item>
-        </Nav>
-        <Nav className="ml-auto">
+      <nav className="main-nav">
+        <span className="nav-left">
+          <Link to="/">
+            FSR UI
+          </Link>
+          <Link to="/plot">
+            Data Plot
+          </Link>
+        </span>
           <Dropdown
             toggleModal={toggleModal}
             emit={emit}
@@ -51,8 +46,7 @@ const NavbarComponent = (props) => {
             activeProfile={activeProfile}
             webUIDataRef={webUIDataRef}
           />
-        </Nav>
-      </Navbar>
+      </nav>
       {state.modalOpen &&
         <DeleteModal
           toggleModal={toggleModal}

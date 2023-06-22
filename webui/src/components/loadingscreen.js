@@ -1,16 +1,14 @@
 import React from "react";
 
-import Navbar from "react-bootstrap/Navbar";
-
 const LoadingScreen = () => {
   return (
     <div className="loading-main">
-      <Navbar bg="light">
-        <Navbar.Brand as={"span"} to="/">
+      <nav>
+        <span>
           FSR WebUI
-        </Navbar.Brand>
-      </Navbar>
-      <p>Connecting...</p>
+        </span>
+      </nav>
+      <p>Not connected! Please check the connection with your controller.</p>
     </div>
   );
 };

@@ -1,120 +1,80 @@
-@font-face {
-  font-family: 'Wendy';
-  src: url('../fonts/wendy.ttf');
-}
-
-@font-face {
-  font-family: 'Bebas Neue';
-  src: url('../fonts/BebasNeue-Regular.ttf')
-}
-
-html * {
-  font-family: 'Wendy';
-}
-
 .App {
-  text-align: center;
-  user-select: none; /* supported by Chrome and Opera */
-  -webkit-user-select: none; /* Safari */
-  -khtml-user-select: none; /* Konqueror HTML */
-  -moz-user-select: none; /* Firefox */
-  -ms-user-select: none; /* Internet Explorer/Edge */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  > nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    height: 5%;
+    background-color: darkcyan;
+    border-bottom: 2px black solid;
+
+    * {
+      color: white;
+    }
+
+    span {
+      padding: .5rem 1rem;
+
+      > * {
+        padding: 0 .5rem;
+      }
+    }
+
+    .dropdown {
+      button {
+        color: red;
+      }
+    }
+  }
+
+  .App-header {
+    position: relative;
+    top: 0;
+    max-height: 95vh;
+    height: 100%;
+    width: 100%;
+    padding: .25rem 0 0 0;
+    background-color: lightgrey;
+
+    section.monitor-row {
+      height: 100%;
+      width: 100%;
+    }
+  }
 
   &.Mobile {
-    .monitor-row {
-      display: grid;
-      grid-template-rows: repeat(2, auto);
-      grid-template-columns: repeat(3, auto);
+    .App-header {
+      section.monitor-row {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
 
-      .monitor-col {
         .threshold-wrapper {
-          input {
-            width: 100%;
+          input.monitor-label {
+            font-size: 1rem;
+            width: 2.5rem;
+          }
+        }
+
+        .num-wrapper {
+          .monitor-label {
+            font-size: 1rem;
           }
         }
       }
     }
   }
-}
 
-.App-header {
-  background-color: #282c34;
-  height: 96vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-
-  .container-fluid {
-    max-height: 100%;
-    padding: 0px;
-  }
-}
-
-.navbar {
-  height: 4vh;
-  * {
-    font-family: 'Bebas Neue'
-  }
-}
-
-.delete-modal {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1;
-
-  .modal-block {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: black;
-    opacity: .7;
-    z-index: 1;
-  }
-  .modal-body {
-    position: fixed;
-    top: 30%;
-    bottom: 40%;
-    left: 30%;
-    right: 30%;
-    background-color: rgb(41, 18, 83);
-    color: white;
-    z-index: 2;
-    display: flex;
-    justify-content: center;
-    flex-direction: column;
-    border: 5px rgb(85, 85, 85) solid;
-    border-radius: 30px;
-    
-    h4 {
-      font-size: 2rem;
-      font-family: 'Bebas Neue'
-    }
-
-    span {
-      display: flex;
-      justify-content: space-between;
-      max-width: 200px;
-      margin: 0 auto;
-      width: 80%;
-      
-      button {
-        margin: 15px;
-        font-size: 2rem;
-        padding: 0px;
-        width: 40%;
+  &.Desktop {
+    .App-header {
+      section.monitor-row {
+        display: flex;
       }
     }
   }
-}
-
-.App-link {
-  color: #61dafb;
 }

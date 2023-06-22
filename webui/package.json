@@ -16,7 +16,7 @@
     "socket.io": "^2.4.0"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "NODE_ENV=development react-scripts start",
     "start-api": "cd server && venv/bin/python server.py",
     "build": "react-scripts build",
     "test": "react-scripts test",

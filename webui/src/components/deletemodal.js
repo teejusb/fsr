@@ -1,5 +1,4 @@
 import React from "react";
-import Button from "react-bootstrap/Button";
 
 const DeleteModal = (props) => {
   const { toggleModal, removeProfile, profile } = props;
@@ -9,12 +8,12 @@ const DeleteModal = (props) => {
       <div className="modal-body">
         <h4>Do you want to delete {profile}?</h4>
         <span>
-          <Button variant="light" onClick={(e) => removeProfile(profile, e)}>
+          <button onClick={(e) => removeProfile(profile, e)}>
             YES
-          </Button>
-          <Button variant="light" onClick={() => toggleModal(null)}>
+          </button>
+          <button onClick={() => toggleModal(null)}>
             NO
-          </Button>
+          </button>
         </span>
       </div>
     </div>
