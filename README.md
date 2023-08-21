@@ -16,9 +16,9 @@ Join the [![Discord](https://img.shields.io/discord/778312862425939998?color=586
 ## Requirements
 - A [Teensy](https://www.pjrc.com/store/index.html) or Arduino
   - uses native keyboard library for Arduino and Joystick library for Teensy
-- Python 3.7+
+- Python 3.7-3.10 (needs updating for 3.11+)
     - virtualenv
-- Node 12+
+- Node 12-16 (needs updating for 17+)
   - yarn
 
 ## Hardware setup
