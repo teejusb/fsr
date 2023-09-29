@@ -73,3 +73,142 @@ cd C:\Users\YourUser\path\to\fsr\webui
 yarn start-api
 ```
 Now you can just click on that file to open the UI and start the server.
+
+
+## Joystick Support on Arduino Leonardo and Pro Micro
+
+The FSR firmware will configure Teensy devices as USB joysticks, and other Arduino devices as USB keyboards. Some Arduino boards such as the Arduino Leonardo and Sparkfun's Pro Micro can be configured as Joysticks using an additional third-party library. Here is an example of how to add joystick support.
+
+Install ArduinoJoystickLibrary, by following the installation instructions in that project's readme. https://github.com/MHeironimus/ArduinoJoystickLibrary#installation-instructions
+
+> 1. Download https://github.com/MHeironimus/ArduinoJoystickLibrary/archive/master.zip
+> 2. In the Arduino IDE, select Sketch > Include Library > Add .ZIP Library.... Browse to where the downloaded ZIP file is located and click Open.
+
+Find these lines that set up keyboard support in fsr.ino and delete them.
+```c++
+  #include <Keyboard.h>
+  // And the Keyboard library for Arduino
+  void ButtonStart() {
+    Keyboard.begin();
+  }
+  void ButtonPress(uint8_t button_num) {
+    Keyboard.press('a' + button_num - 1);
+  }
+  void ButtonRelease(uint8_t button_num) {
+    Keyboard.release('a' + button_num - 1);
+  }
+```
+
+Replace the deleted lines with this Joystick code in the same spot.
+```c++
+  #include <Joystick.h>
+  // Create the Joystick
+  Joystick_ Joystick;
+  void ButtonStart() {
+    // Passing false disables autosend.
+    Joystick.begin(false);
+  }
+  void ButtonPress(uint8_t button_num) {
+    Joystick.pressButton(button_num - 1);
+  }
+  void ButtonRelease(uint8_t button_num) {
+    Joystick.releaseButton(button_num - 1);
+  }
+```
+
+Find the following code that sends the joystick updates.
+```c++
+  if (willSend) {
+    lastSend = startMicros;
+    #ifdef CORE_TEENSY
+        Joystick.send_now();
+    #endif
+  }
+```
+
+Change it to the following.
+```c++
+  if (willSend) {
+    lastSend = startMicros;
+    #ifdef CORE_TEENSY
+        Joystick.send_now();
+    #else
+        Joystick.sendState();
+    #endif
+  }
+```
+
+That's all of the changes needed. To summarize another way, here is the full diff for the changes to fsr.ino. Lines starting with a `-` are deleted and lines starting with a `+` are added. 
+
+```diff
+diff --git a/fsr.ino b/fsr.ino
+index 5321534..560489e 100644
+--- a/fsr.ino
++++ b/fsr.ino
+@@ -27,16 +27,18 @@
+     Joystick.button(button_num, 0);
+   }
+ #else
+-  #include <Keyboard.h>
+-  // And the Keyboard library for Arduino
++  #include <Joystick.h>
++  // Create the Joystick
++  Joystick_ Joystick;
+   void ButtonStart() {
+-    Keyboard.begin();
++    // Passing false disables autosend.
++    Joystick.begin(false);
+   }
+   void ButtonPress(uint8_t button_num) {
+-    Keyboard.press('a' + button_num - 1);
++    Joystick.pressButton(button_num - 1);
+   }
+   void ButtonRelease(uint8_t button_num) {
+-    Keyboard.release('a' + button_num - 1);
++    Joystick.releaseButton(button_num - 1);
+   }
+ #endif
+ 
+@@ -598,6 +600,8 @@ void loop() {
+     lastSend = startMicros;
+     #ifdef CORE_TEENSY
+         Joystick.send_now();
++    #else
++        Joystick.sendState();
+     #endif
+   }
+```
+
+### Advanced Joystick Configuration
+
+By default, ArduinoJoystickLibrary creates a joystick with 32 buttons and several other inputs. If you check the dance pad in a USB game controller test program, it will show buttons and analog axes that are never actually used. Optionally, you can configure the joystick to have only the necessary number of buttons, and no analog sticks or extra controls.
+
+Instead of calling the constructor with default arguments,
+
+```c++
+  // Create the Joystick
+  Joystick_ Joystick;
+```
+
+pass the various configuration arguments as shown below. If your dance pad has more than 4 buttons, make sure the button count is big enough.
+
+```c++
+  // Create the Joystick
+  Joystick_ Joystick(
+    JOYSTICK_DEFAULT_REPORT_ID,
+    JOYSTICK_TYPE_GAMEPAD,
+    4,     // Button Count
+    0,     // Hat Switch Count
+    false, // X axis
+    false, // Y axis
+    false, // Z Axis
+    false, // Rx
+    false, // Ry
+    false, // Rz
+    false, // Rudder
+    false, // Throttle
+    false, // Accelerator,
+    false, // Brake
+    false  // Steering
+  );
+```
