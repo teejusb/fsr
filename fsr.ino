@@ -43,10 +43,10 @@
     Joystick.begin(false);
   }
   void ButtonPress(uint8_t button_num) {
-    Joystick.pressButton(button_num - 1);
+    Joystick.pressButton(button_num);
   }
   void ButtonRelease(uint8_t button_num) {
-    Joystick.releaseButton(button_num - 1);
+    Joystick.releaseButton(button_num);
   }
   void ButtonSend() {
     Joystick.sendState();
