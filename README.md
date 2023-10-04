@@ -73,3 +73,22 @@ cd C:\Users\YourUser\path\to\fsr\webui
 yarn start-api
 ```
 Now you can just click on that file to open the UI and start the server.
+
+
+## Joystick Support on Arduino Leonardo and Pro Micro
+
+The FSR firmware will configure Teensy devices as USB joysticks, and other Arduino devices as USB keyboards. Some Arduino boards such as the Arduino Leonardo and Sparkfun's Pro Micro can be configured as Joysticks using an additional third-party library.
+
+Install ArduinoJoystickLibrary, by following the installation instructions in that project's readme. https://github.com/MHeironimus/ArduinoJoystickLibrary#installation-instructions
+
+> 1. Download https://github.com/MHeironimus/ArduinoJoystickLibrary/archive/master.zip
+> 2. In the Arduino IDE, select Sketch > Include Library > Add .ZIP Library.... Browse to where the downloaded ZIP file is located and click Open.
+
+Find this line, and remove the slashes at the beginning to uncomment it.
+```c++
+// #define USE_ARDUINO_JOYSTICK_LIBRARY
+```
+
+```c++
+#define USE_ARDUINO_JOYSTICK_LIBRARY
+```
