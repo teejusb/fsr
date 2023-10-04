@@ -10,8 +10,13 @@
   #define SET_BIT(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
+// To enable joystick support on Atmega32u4 boards such as a Leonardo or Pro Micro,
+// install Arduino Joystick Library from
+// https://github.com/MHeironimus/ArduinoJoystickLibrary/tree/master#installation-instructions
+// then uncomment the following line.
+// #define USE_ARDUINO_JOYSTICK_LIBRARY
 
-#ifdef CORE_TEENSY
+#if defined(CORE_TEENSY)
   // Use the Joystick library for Teensy
   void ButtonStart() {
     // Use Joystick.begin() for everything that's not Teensy 2.0.
@@ -26,6 +31,26 @@
   void ButtonRelease(uint8_t button_num) {
     Joystick.button(button_num, 0);
   }
+  void ButtonSend() {
+    Joystick.send_now();
+  }
+#elif defined(USE_ARDUINO_JOYSTICK_LIBRARY)
+  #include <Joystick.h>
+  // Create the Joystick
+  Joystick_ Joystick;
+  void ButtonStart() {
+    // Passing false disables autosend.
+    Joystick.begin(false);
+  }
+  void ButtonPress(uint8_t button_num) {
+    Joystick.pressButton(button_num - 1);
+  }
+  void ButtonRelease(uint8_t button_num) {
+    Joystick.releaseButton(button_num - 1);
+  }
+  void ButtonSend() {
+    Joystick.sendState();
+  }
 #else
   #include <Keyboard.h>
   // And the Keyboard library for Arduino
@@ -37,6 +62,9 @@
   }
   void ButtonRelease(uint8_t button_num) {
     Keyboard.release('a' + button_num - 1);
+  }
+  void ButtonSend() {
+    // Not needed for keyboard
   }
 #endif
 
@@ -596,9 +624,7 @@ void loop() {
 
   if (willSend) {
     lastSend = startMicros;
-    #ifdef CORE_TEENSY
-        Joystick.send_now();
-    #endif
+    ButtonSend();
   }
 
   if (loopTime == -1) {
