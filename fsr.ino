@@ -99,6 +99,31 @@ uint8_t curButtonNum = 1;
 
 /*===========================================================================*/
 
+// Interface for reading a sensor.
+class ISensorReader {
+  public:
+    virtual ~ISensorReader() {}
+
+    // Return a value from 0 to 1023 representing the state of the sensor.
+    virtual uint16_t read() = 0;
+};
+
+// Basic sensor reader to read an analog pin using analogRead().
+class SensorReader: public ISensorReader {
+  public:
+    SensorReader(uint8_t pin_value)
+        : pin_value_(pin_value) {}
+
+    uint16_t read() {
+      return analogRead(pin_value_);
+    }
+
+  private:
+    uint8_t pin_value_;
+};
+
+/*===========================================================================*/
+
 // Calculates the Weighted Moving Average for a given period size.
 // Values provided to this class should fall in [−32,768, 32,767] otherwise it
 // may overflow. We use a 32-bit integer for the intermediate sums which we
@@ -337,7 +362,20 @@ class SensorState {
 class Sensor {
  public:
   Sensor(uint8_t pin_value, SensorState* sensor_state = nullptr)
-      : initialized_(false), pin_value_(pin_value),
+      : initialized_(false),
+        sensor_reader_(new SensorReader(pin_value)),
+        should_delete_sensor_reader_(true),
+        user_threshold_(kDefaultThreshold),
+        #if defined(CAN_AVERAGE)
+          moving_average_(kWindowSize),
+        #endif
+        offset_(0), sensor_state_(sensor_state),
+        should_delete_state_(false) {}
+
+  Sensor(ISensorReader* sensor_reader, SensorState* sensor_state = nullptr)
+      : initialized_(false),
+        sensor_reader_(sensor_reader),
+        should_delete_sensor_reader_(false),
         user_threshold_(kDefaultThreshold),
         #if defined(CAN_AVERAGE)
           moving_average_(kWindowSize),
@@ -391,7 +429,7 @@ class Sensor {
       return;
     }
 
-    int16_t sensor_value = analogRead(pin_value_);
+    int16_t sensor_value = sensor_reader_->read();
 
     #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
@@ -438,8 +476,15 @@ class Sensor {
  private:
   // Ensures that Init() has been called at exactly once on this Sensor.
   bool initialized_;
-  // The pin on the Teensy/Arduino corresponding to this sensor.
-  uint8_t pin_value_;
+
+  // The default sensor reader reads an analog pin with Arduino's analogRead
+  // function. A custom SensorReader can be used to do things like configure
+  // a multiplexer before reading, or read from an ADC connected with a sen
+  // or 2-wire interface.
+  ISensorReader* sensor_reader_;
+  // Used to indicate if the sensor reader is owned by this instance, or if it was
+  // passed in from outside
+  bool should_delete_sensor_reader_;
 
   // The user defined threshold value to activate/deactivate this sensor at.
   int16_t user_threshold_;
