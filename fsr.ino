@@ -122,6 +122,54 @@ class SensorReader: public ISensorReader {
     uint8_t pin_value_;
 };
 
+class IMux {
+  public:
+    virtual ~IMux() {}
+    virtual void init() = 0;
+    virtual void selectChannel(uint8_t selectChannel) = 0;
+};
+
+// Control 3 digital output pins to select one of 8 channels (0 to 7)
+// on an analog multiplexer.
+class Mux8: public IMux {
+  public:
+    Mux8(pin_size_t a, pin_size_t b, pin_size_t c)
+        : a_(a), b_(b), c_(c) {}
+
+  void init() {
+    pinMode(a_, OUTPUT);
+    pinMode(b_, OUTPUT);
+    pinMode(c_, OUTPUT);
+  }
+
+  void selectChannel(uint8_t position) {
+    digitalWrite(a_, (1 & position) ? HIGH : LOW);
+    digitalWrite(b_, (2 & position) ? HIGH : LOW);
+    digitalWrite(c_, (4 & position) ? HIGH : LOW);
+  }
+
+  private:
+    uint8_t a_;
+    uint8_t b_;
+    uint8_t c_;
+};
+
+class MuxedSensorReader: public ISensorReader {
+  public:
+    MuxedSensorReader(ISensorReader* wrapped_reader, IMux* mux, uint8_t position)
+        : wrapped_reader_(wrapped_reader), mux_(mux), position_(position) {}
+
+    uint16_t read() {
+      mux_->selectChannel(position_);
+      return wrapped_reader_->read();
+    }
+
+  private:
+    ISensorReader* wrapped_reader_;
+    IMux* mux_;
+    uint8_t position_;
+};
+
 /*===========================================================================*/
 
 // Calculates the Weighted Moving Average for a given period size.
@@ -527,6 +575,26 @@ class Sensor {
 //   Sensor(A2),
 //   Sensor(A3),
 //   Sensor(A4),
+// };
+//
+// To use an 8-channel multiplexer,
+// create a Mux8, and a SensorReader, then use them
+// with a MuxedSensorReader. These readers can then be
+// used to create Sensors for the sensor array.
+//
+// // pins 11, 12, and 13 are digital outputs that control the selected channel.
+// // You must also call mux.init() inside of setup().
+// Mux8 mux(11, 12, 13);
+// SensorReader sharedReader(A0); // Analog pin to read
+// MuxedSensorReader reader0(&sharedReader, &mux, 0); // Channel 0
+// MuxedSensorReader reader1(&sharedReader, &mux, 1); // Channel 1
+// MuxedSensorReader reader2(&sharedReader, &mux, 2); // Channel 2
+// MuxedSensorReader reader3(&sharedReader, &mux, 3); // Channel 3
+// Sensor kSensors[] = {
+//   Sensor(&reader0),
+//   Sensor(&reader1),
+//   Sensor(&reader2),
+//   Sensor(&reader3),
 // };
 
 Sensor kSensors[] = {
