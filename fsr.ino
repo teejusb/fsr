@@ -584,7 +584,7 @@ class Sensor {
 
   // The default sensor reader reads an analog pin with Arduino's analogRead
   // function. A custom SensorReader can be used to do things like configure
-  // a multiplexer before reading, or read from an ADC connected with a sen
+  // a multiplexer before reading, or read from an ADC connected with a SPI
   // or 2-wire interface.
   ISensorReader* sensor_reader_;
   // Used to indicate if the sensor reader is owned by this instance, or if it
