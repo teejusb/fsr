@@ -113,7 +113,7 @@ class ISensorReader {
 };
 
 // Basic sensor reader to read an analog pin using analogRead().
-class SensorReader: public ISensorReader {
+class SensorReader : public ISensorReader {
   public:
     SensorReader(uint8_t pin_value)
         : pin_value_(pin_value) {}
@@ -129,6 +129,8 @@ class SensorReader: public ISensorReader {
     uint8_t pin_value_;
 };
 
+// Interface for external Multiplexer where one common signal is switched
+// among several pins.
 class IMux {
   public:
     virtual ~IMux() {}
@@ -139,7 +141,7 @@ class IMux {
 // Control up to 4 digital output pins to select one of 16 channels (0 to 15)
 // on an analog multiplexer. If you only need 4 or 8 channels, pass fewer pin
 // numbers to the constructor.
-class Mux: public IMux {
+class Mux : public IMux {
   public:
     // 4 bits, 16 channels
     Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c, pin_size_t pin_d)
@@ -188,28 +190,34 @@ class Mux: public IMux {
     uint8_t pin_d_;
 };
 
-class MuxedSensorReader: public ISensorReader {
+class MuxedSensorReader : public ISensorReader {
   public:
     MuxedSensorReader(
       ISensorReader* wrapped_reader,
       IMux* mux,
-      uint8_t position
-    ) : wrapped_reader_(wrapped_reader), mux_(mux), position_(position) {}
+      uint8_t position,
+      unsigned int delay_us = 0
+    ) : wrapped_reader_(wrapped_reader),
+    mux_(mux),
+    position_(position),
+    delay_us_(delay_us) {}
 
-    void Init() {
-      wrapped_reader_->Init();
-      mux_->Init();
-    }
+  void Init() {
+    wrapped_reader_->Init();
+    mux_->Init();
+  }
 
-    uint16_t Read() {
-      mux_->SelectChannel(position_);
-      return wrapped_reader_->Read();
-    }
+  uint16_t Read() {
+    mux_->SelectChannel(position_);
+    if (delay_us_) delayMicroseconds(delay_us_);
+    return wrapped_reader_->Read();
+  }
 
   private:
     ISensorReader* wrapped_reader_;
     IMux* mux_;
     uint8_t position_;
+    unsigned int delay_us_;
 };
 
 /*===========================================================================*/
@@ -634,16 +642,17 @@ class Sensor {
 // selected channel of an analog multiplexer.
 //
 // Mux mux(11, 12, 13); // Mux controlled by pins 11, 12, and 13.
-// SensorReader sharedReader(A0); // Analog pin to read
-// MuxedSensorReader reader0(&sharedReader, &mux, 0); // Channel 0
-// MuxedSensorReader reader1(&sharedReader, &mux, 1); // Channel 1
-// MuxedSensorReader reader2(&sharedReader, &mux, 2); // Channel 2
-// MuxedSensorReader reader3(&sharedReader, &mux, 3); // Channel 3
+// unsigned int muxDelayUs = 0; // microseconds between switching and reading
+// SensorReader a0Reader(A0); // Reader for built-in analog pin
+// MuxedSensorReader a0c0Reader(&a0Reader, &mux, 0, muxDelayUs); // Channel 0
+// MuxedSensorReader a0c1Reader(&a0Reader, &mux, 1, muxDelayUs); // Channel 1
+// MuxedSensorReader a0c2Reader(&a0Reader, &mux, 2, muxDelayUs); // Channel 2
+// MuxedSensorReader a0c3Reader(&a0Reader, &mux, 3, muxDelayUs); // Channel 3
 // Sensor kSensors[] = {
-//   Sensor(&reader0),
-//   Sensor(&reader1),
-//   Sensor(&reader2),
-//   Sensor(&reader3),
+//   Sensor(&a0c0Reader),
+//   Sensor(&a0c1Reader),
+//   Sensor(&a0c2Reader),
+//   Sensor(&a0c3Reader),
 // };
 
 Sensor kSensors[] = {
