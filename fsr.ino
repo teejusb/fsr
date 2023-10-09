@@ -129,29 +129,47 @@ class IMux {
     virtual void selectChannel(uint8_t selectChannel) = 0;
 };
 
-// Control 3 digital output pins to select one of 8 channels (0 to 7)
-// on an analog multiplexer.
-class Mux8: public IMux {
+// Control up to 4 digital output pins to select one of 16 channels (0 to 15)
+// on an analog multiplexer. If you only need 4 or 8 channels, pass fewer pin
+// numbers to the constructor.
+class Mux: public IMux {
   public:
-    Mux8(pin_size_t a, pin_size_t b, pin_size_t c)
-        : a_(a), b_(b), c_(c) {}
+    // 4 bits, 16 channels
+    Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c, pin_size_t pin_d)
+        : num_bits_(4), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_d) {}
+
+    // 3 bits, 8 channels
+    Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c)
+        : num_bits_(3), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_c) {}
+
+    // 2 bits, 4 channels
+    Mux(pin_size_t pin_a, pin_size_t pin_b)
+        : num_bits_(2), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_b), pin_d_(pin_b) {}
+
+    // 1 bit, 2 channels
+    Mux(pin_size_t pin_a)
+        : num_bits_(1), pin_a_(pin_a), pin_b_(pin_a), pin_c_(pin_a), pin_d_(pin_a) {}
 
   void init() {
-    pinMode(a_, OUTPUT);
-    pinMode(b_, OUTPUT);
-    pinMode(c_, OUTPUT);
+    pinMode(pin_a_, OUTPUT);
+    if (num_bits_ > 1) pinMode(pin_b_, OUTPUT);
+    if (num_bits_ > 2) pinMode(pin_c_, OUTPUT);
+    if (num_bits_ > 3) pinMode(pin_d_, OUTPUT);
   }
 
   void selectChannel(uint8_t position) {
-    digitalWrite(a_, (1 & position) ? HIGH : LOW);
-    digitalWrite(b_, (2 & position) ? HIGH : LOW);
-    digitalWrite(c_, (4 & position) ? HIGH : LOW);
+    digitalWrite(pin_a_, (1 & position) ? HIGH : LOW);
+    if (num_bits_ > 1) digitalWrite(pin_b_, (2 & position) ? HIGH : LOW);
+    if (num_bits_ > 2) digitalWrite(pin_c_, (4 & position) ? HIGH : LOW);
+    if (num_bits_ > 3) digitalWrite(pin_d_, (8 & position) ? HIGH : LOW);
   }
 
   private:
-    uint8_t a_;
-    uint8_t b_;
-    uint8_t c_;
+    uint8_t num_bits_;
+    uint8_t pin_a_;
+    uint8_t pin_b_;
+    uint8_t pin_c_;
+    uint8_t pin_d_;
 };
 
 class MuxedSensorReader: public ISensorReader {
@@ -578,13 +596,13 @@ class Sensor {
 // };
 //
 // To use an 8-channel multiplexer,
-// create a Mux8, and a SensorReader, then use them
+// create a Mux, and a SensorReader, then use them
 // with a MuxedSensorReader. These readers can then be
 // used to create Sensors for the sensor array.
 //
 // // pins 11, 12, and 13 are digital outputs that control the selected channel.
 // // You must also call mux.init() inside of setup().
-// Mux8 mux(11, 12, 13);
+// Mux mux(11, 12, 13);
 // SensorReader sharedReader(A0); // Analog pin to read
 // MuxedSensorReader reader0(&sharedReader, &mux, 0); // Channel 0
 // MuxedSensorReader reader1(&sharedReader, &mux, 1); // Channel 1
