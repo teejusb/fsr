@@ -104,6 +104,10 @@ class ISensorReader {
   public:
     virtual ~ISensorReader() {}
 
+    // Do any necessary one-time setup such as initializing hardware.
+    // May be called more than once but should only run setup once.
+    virtual void init() = 0;
+
     // Return a value from 0 to 1023 representing the state of the sensor.
     virtual uint16_t read() = 0;
 };
@@ -113,6 +117,9 @@ class SensorReader: public ISensorReader {
   public:
     SensorReader(uint8_t pin_value)
         : pin_value_(pin_value) {}
+
+    // No setup needed since pin mode defaults to input.
+    void init() {}
 
     uint16_t read() {
       return analogRead(pin_value_);
@@ -136,25 +143,33 @@ class Mux: public IMux {
   public:
     // 4 bits, 16 channels
     Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c, pin_size_t pin_d)
-        : num_bits_(4), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_d) {}
+        : initialized_(false), num_bits_(4),
+        pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_d) {}
 
     // 3 bits, 8 channels
     Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c)
-        : num_bits_(3), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_c) {}
+        : initialized_(false), num_bits_(3),
+        pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_c) {}
 
     // 2 bits, 4 channels
     Mux(pin_size_t pin_a, pin_size_t pin_b)
-        : num_bits_(2), pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_b), pin_d_(pin_b) {}
+        : initialized_(false), num_bits_(2),
+        pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_b), pin_d_(pin_b) {}
 
     // 1 bit, 2 channels
     Mux(pin_size_t pin_a)
-        : num_bits_(1), pin_a_(pin_a), pin_b_(pin_a), pin_c_(pin_a), pin_d_(pin_a) {}
+        : initialized_(false), num_bits_(1),
+        pin_a_(pin_a), pin_b_(pin_a), pin_c_(pin_a), pin_d_(pin_a) {}
 
   void init() {
+    if (initialized_) {
+      return;
+    }
     pinMode(pin_a_, OUTPUT);
     if (num_bits_ > 1) pinMode(pin_b_, OUTPUT);
     if (num_bits_ > 2) pinMode(pin_c_, OUTPUT);
     if (num_bits_ > 3) pinMode(pin_d_, OUTPUT);
+    initialized_ = true;
   }
 
   void selectChannel(uint8_t position) {
@@ -165,6 +180,7 @@ class Mux: public IMux {
   }
 
   private:
+    bool initialized_;
     uint8_t num_bits_;
     uint8_t pin_a_;
     uint8_t pin_b_;
@@ -176,6 +192,11 @@ class MuxedSensorReader: public ISensorReader {
   public:
     MuxedSensorReader(ISensorReader* wrapped_reader, IMux* mux, uint8_t position)
         : wrapped_reader_(wrapped_reader), mux_(mux), position_(position) {}
+
+    void init() {
+      wrapped_reader_->init();
+      mux_->init();
+    }
 
     uint16_t read() {
       mux_->selectChannel(position_);
@@ -465,6 +486,10 @@ class Sensor {
       return;
     }
 
+    // Initialize the sensor reader. For a multiplexer, this sets the pins
+    // selecting the channel address to output mode.
+    sensor_reader_->init();
+
     // There is no state for this sensor, create one.
     if (sensor_state_ == nullptr) {
       sensor_state_ = new SensorState();
@@ -599,10 +624,10 @@ class Sensor {
 // create a Mux, and a SensorReader, then use them
 // with a MuxedSensorReader. These readers can then be
 // used to create Sensors for the sensor array.
+// Pins 11, 12, and 13 in this example are digital outputs that control the
+// selected channel of an analog multiplexer.
 //
-// // pins 11, 12, and 13 are digital outputs that control the selected channel.
-// // You must also call mux.init() inside of setup().
-// Mux mux(11, 12, 13);
+// Mux mux(11, 12, 13); // Mux controlled by pins 11, 12, and 13.
 // SensorReader sharedReader(A0); // Analog pin to read
 // MuxedSensorReader reader0(&sharedReader, &mux, 0); // Channel 0
 // MuxedSensorReader reader1(&sharedReader, &mux, 1); // Channel 1
