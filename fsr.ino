@@ -144,22 +144,22 @@ class IMux {
 class Mux : public IMux {
   public:
     // 4 bits, 16 channels
-    Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c, pin_size_t pin_d)
+    Mux(uint8_t pin_a, uint8_t pin_b, uint8_t pin_c, uint8_t pin_d)
         : initialized_(false), num_bits_(4),
         pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_d) {}
 
     // 3 bits, 8 channels
-    Mux(pin_size_t pin_a, pin_size_t pin_b, pin_size_t pin_c)
+    Mux(uint8_t pin_a, uint8_t pin_b, uint8_t pin_c)
         : initialized_(false), num_bits_(3),
         pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_c), pin_d_(pin_c) {}
 
     // 2 bits, 4 channels
-    Mux(pin_size_t pin_a, pin_size_t pin_b)
+    Mux(uint8_t pin_a, uint8_t pin_b)
         : initialized_(false), num_bits_(2),
         pin_a_(pin_a), pin_b_(pin_b), pin_c_(pin_b), pin_d_(pin_b) {}
 
     // 1 bit, 2 channels
-    Mux(pin_size_t pin_a)
+    Mux(uint8_t pin_a)
         : initialized_(false), num_bits_(1),
         pin_a_(pin_a), pin_b_(pin_a), pin_c_(pin_a), pin_d_(pin_a) {}
 
