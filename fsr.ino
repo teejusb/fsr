@@ -474,6 +474,9 @@ class Sensor {
         should_delete_state_(false) {}
   
   ~Sensor() {
+    if (should_delete_sensor_reader_) {
+      delete sensor_reader_;
+    }
     if (should_delete_state_) {
       delete sensor_state_;
     }
