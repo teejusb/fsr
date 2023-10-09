@@ -106,10 +106,10 @@ class ISensorReader {
 
     // Do any necessary one-time setup such as initializing hardware.
     // May be called more than once but should only run setup once.
-    virtual void init() = 0;
+    virtual void Init() = 0;
 
     // Return a value from 0 to 1023 representing the state of the sensor.
-    virtual uint16_t read() = 0;
+    virtual uint16_t Read() = 0;
 };
 
 // Basic sensor reader to read an analog pin using analogRead().
@@ -119,9 +119,9 @@ class SensorReader: public ISensorReader {
         : pin_value_(pin_value) {}
 
     // No setup needed since pin mode defaults to input.
-    void init() {}
+    void Init() {}
 
-    uint16_t read() {
+    uint16_t Read() {
       return analogRead(pin_value_);
     }
 
@@ -132,8 +132,8 @@ class SensorReader: public ISensorReader {
 class IMux {
   public:
     virtual ~IMux() {}
-    virtual void init() = 0;
-    virtual void selectChannel(uint8_t selectChannel) = 0;
+    virtual void Init() = 0;
+    virtual void SelectChannel(uint8_t selectChannel) = 0;
 };
 
 // Control up to 4 digital output pins to select one of 16 channels (0 to 15)
@@ -161,7 +161,7 @@ class Mux: public IMux {
         : initialized_(false), num_bits_(1),
         pin_a_(pin_a), pin_b_(pin_a), pin_c_(pin_a), pin_d_(pin_a) {}
 
-  void init() {
+  void Init() {
     if (initialized_) {
       return;
     }
@@ -172,7 +172,7 @@ class Mux: public IMux {
     initialized_ = true;
   }
 
-  void selectChannel(uint8_t position) {
+  void SelectChannel(uint8_t position) {
     digitalWrite(pin_a_, (1 & position) ? HIGH : LOW);
     if (num_bits_ > 1) digitalWrite(pin_b_, (2 & position) ? HIGH : LOW);
     if (num_bits_ > 2) digitalWrite(pin_c_, (4 & position) ? HIGH : LOW);
@@ -190,17 +190,20 @@ class Mux: public IMux {
 
 class MuxedSensorReader: public ISensorReader {
   public:
-    MuxedSensorReader(ISensorReader* wrapped_reader, IMux* mux, uint8_t position)
-        : wrapped_reader_(wrapped_reader), mux_(mux), position_(position) {}
+    MuxedSensorReader(
+      ISensorReader* wrapped_reader,
+      IMux* mux,
+      uint8_t position
+    ) : wrapped_reader_(wrapped_reader), mux_(mux), position_(position) {}
 
-    void init() {
-      wrapped_reader_->init();
-      mux_->init();
+    void Init() {
+      wrapped_reader_->Init();
+      mux_->Init();
     }
 
-    uint16_t read() {
-      mux_->selectChannel(position_);
-      return wrapped_reader_->read();
+    uint16_t Read() {
+      mux_->SelectChannel(position_);
+      return wrapped_reader_->Read();
     }
 
   private:
@@ -488,7 +491,7 @@ class Sensor {
 
     // Initialize the sensor reader. For a multiplexer, this sets the pins
     // selecting the channel address to output mode.
-    sensor_reader_->init();
+    sensor_reader_->Init();
 
     // There is no state for this sensor, create one.
     if (sensor_state_ == nullptr) {
@@ -520,7 +523,7 @@ class Sensor {
       return;
     }
 
-    int16_t sensor_value = sensor_reader_->read();
+    int16_t sensor_value = sensor_reader_->Read();
 
     #if defined(CAN_AVERAGE)
       // Fetch the updated Weighted Moving Average.
@@ -573,8 +576,8 @@ class Sensor {
   // a multiplexer before reading, or read from an ADC connected with a sen
   // or 2-wire interface.
   ISensorReader* sensor_reader_;
-  // Used to indicate if the sensor reader is owned by this instance, or if it was
-  // passed in from outside
+  // Used to indicate if the sensor reader is owned by this instance, or if it
+  // was passed in from outside
   bool should_delete_sensor_reader_;
 
   // The user defined threshold value to activate/deactivate this sensor at.
