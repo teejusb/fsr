@@ -16,8 +16,14 @@
 // then uncomment the following line.
 // #define USE_ARDUINO_JOYSTICK_LIBRARY
 
-#if defined(CORE_TEENSY)
-  // Use the Joystick library for Teensy
+#if defined(CORE_TEENSY) || defined(ARDUINO_ARCH_RP2040)
+  // Use the Joystick library for Teensy or Arduino-Pico
+  #ifdef ARDUINO_ARCH_RP2040
+    // Teensy includes Joystick by default but Arduino-Pico requires
+    // it to be included explicitly.
+    // Make sure to select Pico SDK for the Arduino-Pico USB stack.
+    #include <Joystick.h>
+  #endif
   void ButtonStart() {
     // Use Joystick.begin() for everything that's not Teensy 2.0.
     #ifndef __AVR_ATmega32U4__
