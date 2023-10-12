@@ -16,16 +16,8 @@
 // then uncomment the following line.
 // #define USE_ARDUINO_JOYSTICK_LIBRARY
 
-#if defined(CORE_TEENSY) || defined(ARDUINO_ARCH_RP2040)
-  // Use the Joystick library for Teensy or Arduino-Pico
-  #ifdef ARDUINO_ARCH_RP2040
-    // Teensy includes Joystick by default but Arduino-Pico requires
-    // it to be included explicitly.
-    // Make sure to select Pico SDK for the Arduino-Pico USB stack.
-    #include <Joystick.h>
-    // tiny usb is needed in order to wait for send_now to work.
-    #include "tusb.h"
-  #endif
+#if defined(CORE_TEENSY)
+  // Use the Joystick library for Teensy
   void ButtonStart() {
     // Use Joystick.begin() for everything that's not Teensy 2.0.
     #ifndef __AVR_ATmega32U4__
@@ -39,14 +31,40 @@
   void ButtonRelease(uint8_t button_num) {
     Joystick.button(button_num, 0);
   }
-  void ButtonSend() {
-    #ifdef ARDUINO_ARCH_RP2040
-      // Wait for tiny usb to be ready.
-      // If it isn't, Joystick.send_now() will block until it is,
-      // for around 8ms (125 hz polling)
-      if (!tud_hid_ready()) { return; }
-    #endif
+  bool ButtonSend() {
     Joystick.send_now();
+    return true;
+  }
+#elif defined(ARDUINO_ARCH_RP2040)
+  // Use the Joystick library for Arduino-Pico
+  // Teensy includes Joystick by default but Arduino-Pico requires
+  // it to be included explicitly. The API is similar but it
+  // is a different implementation with its own quirks.
+  // Make sure to select Pico SDK for the Arduino-Pico USB stack.
+  #include <Joystick.h>
+  // Include tusb.h to get tud_hid_ready()
+  #include "tusb.h"
+  void ButtonStart() {
+    Joystick.begin();
+    Joystick.useManualSend(true);
+  }
+  void ButtonPress(uint8_t button_num) {
+    Joystick.button(button_num, 1);
+  }
+  void ButtonRelease(uint8_t button_num) {
+    Joystick.button(button_num, 0);
+  }
+  bool ButtonSend() {
+    // Wait until send_now can send with minimal delay.
+    // If it isn't ready, Joystick.send_now() will block.
+    // Since the Arduino-Pico Joystick library requests 10ms polling,
+    // that means send_now() could block for up to 10ms.
+    if (!tud_hid_ready()) {
+      return false;
+    } else {
+      Joystick.send_now();
+      return true;
+    }
   }
 #elif defined(USE_ARDUINO_JOYSTICK_LIBRARY)
   #include <Joystick.h>
@@ -64,6 +82,7 @@
   }
   void ButtonSend() {
     Joystick.sendState();
+    return true;
   }
 #else
   #include <Keyboard.h>
@@ -78,7 +97,8 @@
     Keyboard.release('a' + button_num - 1);
   }
   void ButtonSend() {
-    // Not needed for keyboard
+    // Keyboard doesn't use manual send, but report success anyway.
+    return true;
   }
 #endif
 
@@ -637,8 +657,10 @@ void loop() {
   }
 
   if (willSend) {
-    lastSend = startMicros;
-    ButtonSend();
+    bool sent = ButtonSend();
+    if (sent) {
+      lastSend = startMicros;
+    }
   }
 
   if (loopTime == -1) {
