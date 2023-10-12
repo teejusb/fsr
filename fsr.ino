@@ -23,6 +23,8 @@
     // it to be included explicitly.
     // Make sure to select Pico SDK for the Arduino-Pico USB stack.
     #include <Joystick.h>
+    // tiny usb is needed in order to wait for send_now to work.
+    #include "tusb.h"
   #endif
   void ButtonStart() {
     // Use Joystick.begin() for everything that's not Teensy 2.0.
@@ -38,6 +40,12 @@
     Joystick.button(button_num, 0);
   }
   void ButtonSend() {
+    #ifdef ARDUINO_ARCH_RP2040
+      // Wait for tiny usb to be ready.
+      // If it isn't, Joystick.send_now() will block until it is,
+      // for around 8ms (125 hz polling)
+      if (!tud_hid_ready()) { return; }
+    #endif
     Joystick.send_now();
   }
 #elif defined(USE_ARDUINO_JOYSTICK_LIBRARY)
