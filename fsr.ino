@@ -46,8 +46,8 @@
   #include "tusb.h"
   // Arduino-Pico defaults to 10ms polling interval (100Hz) but it can be
   // set to a shorter interval by declaring a usb_hid_poll_interval global.
-  // Set the interval to 1 for 1000Hz polling. Requires a newer release
-  // than 3.6.0. Older versions will always request a 10ms interval.
+  // Set the interval to 1 for 1000Hz polling. Requires Arduino-Pico 3.6.1
+  // or newer to work. Older versions will always request a 10ms interval.
   int usb_hid_poll_interval = 1;
   void ButtonStart() {
     Joystick.begin();
