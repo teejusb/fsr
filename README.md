@@ -31,7 +31,7 @@ Follow a guide like [fsr-pad-guide](https://github.com/Sereni/fsr-pad-guide) or 
 1. In Arduino IDE, set the `Tools` > `Board` to your microcontroller (e.g. `Teensy 4.0`)
 1. In Arduino IDE, set the `Tools` > `Port` to select the serial port for the plugged in microcontroller (e.g. `COM5` or `/dev/something`)
 1. Load [fsr.ino](./fsr.ino) in Arduino IDE.
-1. By default, [A0-A3 are the pins](https://forum.pjrc.com/teensy40_pinout1.png) used for the FSR sensors in this software. If you aren't using these pins [alter the SensorState array](./fsr.ino#L437-L442)
+1. By default, [A0-A3 are the pins](https://forum.pjrc.com/teensy40_pinout1.png) used for the FSR sensors in this software. If you aren't using these pins [alter the SensorState array](./fsr.ino#L509-L531)
 1. Push the code to the board
 
 ### Testing and using the serial monitor
@@ -92,3 +92,9 @@ Find this line, and remove the slashes at the beginning to uncomment it.
 ```c++
 #define USE_ARDUINO_JOYSTICK_LIBRARY
 ```
+
+## Support for RP2040
+
+The RP2040 is the microcontroller used by the Raspberry Pi Pico. The Pi Pico only exposes 3 analog input pins, but the RP2040 actually has 4. Various other RP2040 development boards do make it easy to access all 4 analog pins, which is more suitable for building a 4-panel dance pad.
+
+To run the FSR firmware on an RP2040-based device, install "Raspberry Pi Pico/RP2040" 3.6.1 or newer in the Arduino IDE boards manager. Make sure the "USB Stack" option in the Tools menu is set to "Pico SDK."
