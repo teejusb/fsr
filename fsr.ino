@@ -62,8 +62,8 @@
   bool ButtonSend() {
     // Wait until send_now can send with minimal delay.
     // If it isn't ready, Joystick.send_now() will block.
-    // Since the Arduino-Pico Joystick library requests 10ms polling,
-    // that means send_now() could block for up to 10ms.
+    // Problems are most pronounced at slower polling rates since
+    // send_now() could block for a full polling interval.
     if (!tud_hid_ready()) {
       return false;
     } else {
