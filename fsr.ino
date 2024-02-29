@@ -85,7 +85,7 @@
   void ButtonRelease(uint8_t button_num) {
     Joystick.releaseButton(button_num);
   }
-  void ButtonSend() {
+  bool ButtonSend() {
     Joystick.sendState();
     return true;
   }
@@ -101,7 +101,7 @@
   void ButtonRelease(uint8_t button_num) {
     Keyboard.release('a' + button_num - 1);
   }
-  void ButtonSend() {
+  bool ButtonSend() {
     // Keyboard doesn't use manual send, but report success anyway.
     return true;
   }
