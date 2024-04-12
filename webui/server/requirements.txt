@@ -2,7 +2,7 @@ aiohttp==3.9.3
 async-timeout==4.0.3
 attrs==23.2.0
 chardet==5.2.0
-idna==3.6
+idna==3.7
 multidict==6.0.5
 pyserial==3.4
 typing-extensions==4.9.0
