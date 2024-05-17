@@ -487,8 +487,16 @@ function Plot(props) {
 
       // Plot the line graph for each of the sensors.
       const px_per_div = box_width/MAX_SIZE;
+      let plot_nums = 0;
       for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
+          ++plot_nums;
+        }
+      }
+      let k = -1;
+      for (let i = 0; i < numSensors; ++i) {
+        if (display[i]) {
+          ++k;
           ctx.beginPath();
           ctx.setLineDash([]);
           ctx.strokeStyle = colors[i];
@@ -497,10 +505,10 @@ function Plot(props) {
             if (j === curValues.length) { break; }
             if (j === 0) {
               ctx.moveTo(spacing,
-                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
             } else {
               ctx.lineTo(px_per_div*j + spacing,
-                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 + spacing);
+                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
             }
           }
           ctx.stroke();
@@ -508,14 +516,16 @@ function Plot(props) {
       }
 
       // Display the current thresholds.
+      k = -1;
       for (let i = 0; i < numSensors; ++i) {
         if (display[i]) {
+          ++k;
           ctx.beginPath();
           ctx.setLineDash([]);
           ctx.strokeStyle = darkColors[i];
           ctx.lineWidth = 2;
-          ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
-          ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 + spacing);
+          ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
+          ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
           ctx.stroke();
         }
       }
