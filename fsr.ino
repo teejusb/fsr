@@ -35,7 +35,7 @@
     Joystick.send_now();
     return true;
   }
-#elif defined(ARDUINO_ARCH_RP2040)
+#elif defined(ARDUINO_ARCH_RP2040) || defined(PICO_BOARD)
   // Use the Joystick library for Arduino-Pico
   // Teensy includes Joystick by default but Arduino-Pico requires
   // it to be included explicitly. The API is similar but it
