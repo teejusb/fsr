@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <EEPROM.h>
 
 #if !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega328P__) && \
     !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
@@ -560,6 +561,10 @@ class SerialProcessor {
         case 'T':
           PrintThresholds();
           break;
+        case 'p':
+        case 'P':
+          PersistThresholds();
+          break;
         case '0' ... '9': // Case ranges are non-standard but work in gcc
           UpdateAndPrintThreshold(bytes_read);
         default:
@@ -611,6 +616,29 @@ class SerialProcessor {
     Serial.print("\n");
   }
 
+  void PersistThresholds() {
+    int16_t t;
+    uint8_t b1, b2;
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      t = kSensors[i].GetThreshold();
+      b1 = (t & 0xFF);
+      b2 = (t >> 8);
+      EEPROM.write(i*2,   b1);
+      EEPROM.write(i*2+1, b2);
+    }
+  }
+
+  void RestoreThresholds() {
+    int16_t t;
+    uint8_t b1, b2;
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      b1 = EEPROM.read(i*2);
+      b2 = EEPROM.read(i*2+1);
+      t = (b2 << 8) | b1;
+      kSensors[i].UpdateThreshold(t);
+    }
+  }
+
  private:
    static const size_t kBufferSize = 64;
    char buffer_[kBufferSize];
@@ -634,6 +662,8 @@ void setup() {
     kSensors[i].Init(i + 1);
   }
   
+  serialProcessor.RestoreThresholds();
+
   #if defined(CLEAR_BIT) && defined(SET_BIT)
 	  // Set the ADC prescaler to 16 for boards that support it,
 	  // which is a good balance between speed and accuracy.
