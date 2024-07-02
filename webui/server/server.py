@@ -291,6 +291,12 @@ def update_threshold(values, index):
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
 
+def persist_thresholds():
+  try:
+    serial_handler.write_queue.put('p\n', block=False)
+  except queue.Full:
+    logger.error('Could not persist thresholds. Queue full.')
+
 
 def add_profile(profile_name, thresholds):
   profile_handler.AddProfile(profile_name, thresholds)
@@ -385,6 +391,8 @@ async def get_ws(request):
             if action == 'update_threshold':
               values, index = data[1:]
               update_threshold(values, index)
+            elif action == 'persist_thresholds':
+              persist_thresholds()
             elif action == 'add_profile':
               profile_name, thresholds = data[1:]
               add_profile(profile_name, thresholds)

@@ -642,6 +642,10 @@ function FSRWebUI(props) {
     emit(['remove_profile', profile_name]);
   }
 
+  function PersistThresholds(e) {
+    emit(['persist_thresholds']);
+  }
+
   function ChangeProfile(e) {
     // Strip out the "X " added by the button.
     const profile_name = e.target.innerText.replace('X ', '');
@@ -658,6 +662,7 @@ function FSRWebUI(props) {
               <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
             </Nav.Item>
           </Nav>
+          <Button onClick={PersistThresholds}>Persist thresholds</Button>
           <Nav className="ml-auto">
             <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
               {profiles.map(function(profile) {
