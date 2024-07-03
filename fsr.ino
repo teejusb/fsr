@@ -564,6 +564,7 @@ class SerialProcessor {
         case 'p':
         case 'P':
           PersistThresholds();
+          Serial.print("p\n");
           break;
         case '0' ... '9': // Case ranges are non-standard but work in gcc
           UpdateAndPrintThreshold(bytes_read);
