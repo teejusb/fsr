@@ -564,7 +564,6 @@ class SerialProcessor {
         case 'p':
         case 'P':
           PersistThresholds();
-          Serial.print("p\n");
           break;
         case '0' ... '9': // Case ranges are non-standard but work in gcc
           UpdateAndPrintThreshold(bytes_read);
@@ -688,6 +687,12 @@ class SerialProcessor {
       PersistThresholdsInSlot(last_used_save_slot);
       last_used_save_slot++; // increment only once the write is complete
     }
+    Serial.print("p");
+    for (size_t i = 0; i < kNumSensors; ++i) {
+      Serial.print(" ");
+      Serial.print(kSensors[i].GetThreshold());
+    }
+    Serial.print("\n");
   }
 
   void RestoreThresholds() {
