@@ -205,6 +205,9 @@ class SerialHandler(object):
         if cur != act:
           self.profile_handler.UpdateThresholds(i, act)
 
+    def ConfirmPersisted():
+      broadcast(['thresholds_persisted'])
+
     while not thread_stop_event.is_set():
       if NO_SERIAL:
         offsets = [int(normalvariate(0, num_sensors+1)) for _ in range(num_sensors)]
@@ -240,6 +243,8 @@ class SerialHandler(object):
 
           if cmd == 'v':
             ProcessValues(values)
+          elif cmd == 'p':
+            ConfirmPersisted()
           elif cmd == 't':
             ProcessThresholds(values)
         except queue.Full as e:

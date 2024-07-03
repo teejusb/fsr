@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import logo from './logo.svg';
 import './App.css';
 
+import Alert from 'react-bootstrap/Alert'
 import Navbar from 'react-bootstrap/Navbar'
 import Nav from 'react-bootstrap/Nav'
 import NavDropdown from 'react-bootstrap/NavDropdown'
@@ -608,6 +609,7 @@ function FSRWebUI(props) {
   const numSensors = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
+  const [showPersistedAlert, setShowPersistedAlert] = useState(false);
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
 
@@ -617,10 +619,14 @@ function FSRWebUI(props) {
     wsCallbacks.get_cur_profile = function(msg) {
       setActiveProfile(msg.cur_profile);
     };
+    wsCallbacks.thresholds_persisted = function (msg) {
+      setShowPersistedAlert(true);
+    };
 
     return () => {
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
+      delete wsCallbacks.thresholds_persisted;
     };
   }, [profiles, wsCallbacksRef]);
 
@@ -655,44 +661,47 @@ function FSRWebUI(props) {
   return (
     <div className="App">
       <Router>
-        <Navbar bg="light">
-          <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
-          <Nav>
-            <Nav.Item>
-              <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
-            </Nav.Item>
-          </Nav>
-          <Button onClick={PersistThresholds}>Persist thresholds</Button>
-          <Nav className="ml-auto">
-            <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
-              {profiles.map(function(profile) {
-                if (profile === activeProfile) {
-                  return(
-                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                        onClick={ChangeProfile} active>
-                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                    </NavDropdown.Item>
-                  );
-                } else {
-                  return(
-                    <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
-                        onClick={ChangeProfile}>
-                      <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
-                    </NavDropdown.Item>
-                  );
-                }
-              })}
-              <NavDropdown.Divider />
-              <Form inline onSubmit={(e) => e.preventDefault()}>
-                <Form.Control
-                    onKeyDown={AddProfile}
-                    style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
-                    type="text"
-                    placeholder="New Profile" />
-              </Form>
-            </NavDropdown>
-          </Nav>
-        </Navbar>
+        <>
+          <Navbar bg="light">
+            <Navbar.Brand as={Link} to="/">FSR WebUI</Navbar.Brand>
+            <Nav>
+              <Nav.Item>
+                <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
+              </Nav.Item>
+            </Nav>
+            <Button onClick={PersistThresholds}>Persist thresholds</Button>
+            <Nav className="ml-auto">
+              <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
+                {profiles.map(function(profile) {
+                  if (profile === activeProfile) {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile} active>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  } else {
+                    return(
+                      <NavDropdown.Item key={profile} style={{paddingLeft: "0.5rem"}}
+                          onClick={ChangeProfile}>
+                        <Button variant="light" onClick={RemoveProfile}>X</Button>{' '}{profile}
+                      </NavDropdown.Item>
+                    );
+                  }
+                })}
+                <NavDropdown.Divider />
+                <Form inline onSubmit={(e) => e.preventDefault()}>
+                  <Form.Control
+                      onKeyDown={AddProfile}
+                      style={{marginLeft: "0.5rem", marginRight: "0.5rem"}}
+                      type="text"
+                      placeholder="New Profile" />
+                </Form>
+              </NavDropdown>
+            </Nav>
+          </Navbar>
+          <Alert show={ showPersistedAlert } variant="success" dismissible onClose={()=>setShowPersistedAlert(false)}>Threshold values have been persisted successfully.</Alert>
+        </>
         <Switch>
           <Route exact path="/">
             <ValueMonitors numSensors={numSensors}>
