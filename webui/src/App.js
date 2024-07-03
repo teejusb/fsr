@@ -621,6 +621,7 @@ function FSRWebUI(props) {
     };
     wsCallbacks.thresholds_persisted = function (msg) {
       setShowPersistedAlert(true);
+      console.log("Persisted thresholds: ", msg.thresholds) // TODO: display them
     };
 
     return () => {
