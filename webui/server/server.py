@@ -205,8 +205,8 @@ class SerialHandler(object):
         if cur != act:
           self.profile_handler.UpdateThresholds(i, act)
 
-    def ConfirmPersisted():
-      broadcast(['thresholds_persisted'])
+    def ConfirmPersisted(values):
+      broadcast(['thresholds_persisted', {'thresholds': values}])
 
     while not thread_stop_event.is_set():
       if NO_SERIAL:
@@ -244,7 +244,7 @@ class SerialHandler(object):
           if cmd == 'v':
             ProcessValues(values)
           elif cmd == 'p':
-            ConfirmPersisted()
+            ConfirmPersisted(values)
           elif cmd == 't':
             ProcessThresholds(values)
         except queue.Full as e:
