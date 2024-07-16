@@ -534,6 +534,113 @@ const size_t kNumSensors = sizeof(kSensors)/sizeof(Sensor);
 
 /*===========================================================================*/
 
+class EepromProcessor {
+  public:
+    // last_used_save_slot_ is initialized to -1 before first save.
+    // Will take on values from 0 to LastSaveSlot() afterwards.
+    EepromProcessor() : last_used_save_slot_(-1) {}
+
+    void SaveThresholds() {
+      // Wear levelling strategy:
+      // - First run: Use slot 0
+      // - On rollover: Use slot 0 and clear all other slots
+      // - Normal case: Use next available slot
+      if (last_used_save_slot_ == -1) {
+        SaveThresholdsInSlot(0);
+        last_used_save_slot_ = 0;
+      } else if (last_used_save_slot_ == LastSaveSlot()) {
+        SaveThresholdsInSlot(0);
+        // We just wrote to slot 0, so start from 1.
+        for (int save_slot = 1; save_slot <= LastSaveSlot(); ++save_slot) {
+          MarkSlotTaken(save_slot, false);
+        }
+        last_used_save_slot_ = 0;
+      } else {
+        SaveThresholdsInSlot(last_used_save_slot_);
+        // Increment only once the write is complete.
+        last_used_save_slot_++;
+      }
+      Serial.print("s");
+      for (size_t i = 0; i < kNumSensors; ++i) {
+        Serial.print(" ");
+        Serial.print(kSensors[i].GetThreshold());
+      }
+      Serial.print("\n");
+    }
+
+    void LoadThresholds() {
+      FindLastUsedSaveSlot();
+      if (last_used_save_slot_ == -1) {
+        return;
+      }
+      for (size_t sensor_idx = 0; sensor_idx < kNumSensors; ++sensor_idx) {
+        RestoreThreshold(sensor_idx);
+      }
+    }
+
+  private:
+    size_t SaveSlotSizeBytes() {
+      // +1 for the fake marker sensor, *2 because int16_t
+      return (kNumSensors + 1) * 2
+    }
+    int LastSaveSlot() {
+      // -1 because it's the last VALID index.
+      return (EEPROM.length() / SaveSlotSizeBytes()) - 1;
+    }
+
+    void SaveThreshold(
+        int save_slot, size_t sensor_idx, int16_t threshold) {
+      size_t offset = save_slot * SaveSlotSizeBytes();
+      uint8_t b1 = (threshold & 0xFF);
+      uint8_t b2 = (threshold >> 8);
+      EEPROM.write(offset + sensor_idx * 2,     b1);
+      EEPROM.write(offset + sensor_idx * 2 + 1, b2);
+    }
+
+    int16_t ReadThreshold(int save_slot, size_t sensor_idx) {
+      size_t offset = save_slot * SaveSlotSizeBytes();
+      uint8_t b1 = EEPROM.read(offset + sensor_idx * 2);
+      uint8_t b2 = EEPROM.read(offset + sensor_idx * 2 + 1);
+      return (b2 << 8) | b1;
+    }
+
+    void MarkSlotTaken(int save_slot, bool is_taken) {
+      SaveThreshold(
+          save_slot, kNumSensors, is_taken ? SAVE_SLOT_TAKEN_MARKER : 0);
+    }
+
+    bool IsSlotTaken(int save_slot) {
+      return ReadThreshold(save_slot, kNumSensors) == SAVE_SLOT_TAKEN_MARKER;
+    }
+
+    void FindLastUsedSaveSlot() {
+      for (int save_slot = LastSaveSlot(); save_slot >= 0 ; --save_slot) {
+        if (IsSlotTaken(save_slot)){
+          last_used_save_slot_ = save_slot;
+          return;
+        }
+      }
+      last_used_save_slot_ = -1;
+    }
+
+    void RestoreThreshold(size_t sensor_idx) {
+      kSensors[sensor_idx].UpdateThreshold(
+          ReadThreshold(last_used_save_slot_, sensor_idx));
+    }
+
+    void SaveThresholdsInSlot(int save_slot) {
+      for (size_t sensor_idx = 0; sensor_idx < kNumSensors; ++sensor_idx) {
+        SaveThreshold(
+            save_slot, sensor_idx, kSensors[sensor_idx].GetThreshold());
+      }
+      MarkSlotTaken(save_slot, true);
+    }
+
+    // Any negative number would do, as actual thresholds are >=0.
+    const int16_t SAVE_SLOT_TAKEN_MARKER = -42;
+    int last_used_save_slot_;
+}
+
 class SerialProcessor {
  public:
    void Init(long baud_rate) {
@@ -561,11 +668,11 @@ class SerialProcessor {
         case 'T':
           PrintThresholds();
           break;
-        case 'p':
-        case 'P':
-          PersistThresholds();
+        case 's':
+        case 'S':
+          eeprom_processor_.SaveThresholds();
           break;
-        case '0' ... '9': // Case ranges are non-standard but work in gcc
+        case '0' ... '9': // Case ranges are non-standard but work in gcc.
           UpdateAndPrintThreshold(bytes_read);
         default:
           break;
@@ -616,96 +723,15 @@ class SerialProcessor {
     Serial.print("\n");
   }
 
-  const int16_t SAVE_SLOT_TAKEN_MARKER = -42;  // any negative number would do, as actual thresholds are >=0
-  int last_used_save_slot = -1; // -1 before first persistence. From 0 to LastSaveSlot() afterwards.
-  size_t SaveSlotSizeBytes() { return (kNumSensors + 1) * 2; } // +1 for the fake marker sensor, *2 because int16_t
-  int LastSaveSlot(){ return (EEPROM.length() / SaveSlotSizeBytes()) - 1; } // -1 because it's the last VALID index.
-
-  void PersistThreshold (int save_slot, size_t sensor_index, int16_t threshold) {
-    uint8_t b1, b2;
-    size_t offset = save_slot * SaveSlotSizeBytes();
-    b1 = (threshold & 0xFF);
-    b2 = (threshold >> 8);
-    EEPROM.write(offset + sensor_index * 2,     b1);
-    EEPROM.write(offset + sensor_index * 2 + 1, b2);
-  }
-
-  int16_t ReadThreshold(int save_slot, size_t sensor_index) {
-    uint8_t b1, b2;
-    size_t offset = save_slot * SaveSlotSizeBytes();
-    b1 = EEPROM.read(offset + sensor_index * 2);
-    b2 = EEPROM.read(offset + sensor_index * 2 + 1);
-    return (b2 << 8) | b1;
-  }
-
-  void MarkSlotTaken(int save_slot, bool is_taken) {
-    PersistThreshold(save_slot, kNumSensors, is_taken ? SAVE_SLOT_TAKEN_MARKER : 0);
-  }
-
-  bool IsSlotTaken(int save_slot) {
-    return ReadThreshold(save_slot, kNumSensors) == SAVE_SLOT_TAKEN_MARKER;
-  }
-
-  void FindLastUsedSaveSlot(){
-    for (int save_slot = LastSaveSlot(); save_slot >= 0 ; --save_slot) {
-      if (IsSlotTaken(save_slot)){
-        last_used_save_slot = save_slot;
-        return;
-      }
-    }
-    last_used_save_slot = -1;
-  }
-
-  void RestoreThreshold(size_t sensor_index){
-    kSensors[sensor_index].UpdateThreshold(ReadThreshold(last_used_save_slot, sensor_index));
-  }
-
-  void PersistThresholdsInSlot(int save_slot){
-    for (size_t sensor_index = 0; sensor_index < kNumSensors; ++sensor_index) {
-      PersistThreshold(save_slot, sensor_index, kSensors[sensor_index].GetThreshold());
-    }
-    MarkSlotTaken(save_slot, true);
-  }
-
-  void PersistThresholds() {
-    // Wear levelling strategy:
-    // - First run: Use slot 0
-    // - Normal case: Use next available slot
-    // - On rollover: Use slot 0 and clear all other slots
-    if(last_used_save_slot == -1){ // very first run
-      PersistThresholdsInSlot(0);
-      last_used_save_slot = 0;
-    } else if (last_used_save_slot == LastSaveSlot()) { // save slot rollover
-      PersistThresholdsInSlot(0);
-      for (int save_slot = 1; // we just written in the slot 0, so not erasing.
-           save_slot <= LastSaveSlot(); // erasing sequentially towards the last slot, so if interrupted, the last slot is used
-           ++save_slot) {
-        MarkSlotTaken(save_slot, false);
-      }
-      last_used_save_slot = 0;
-    } else { // usual case
-      PersistThresholdsInSlot(last_used_save_slot);
-      last_used_save_slot++; // increment only once the write is complete
-    }
-    Serial.print("p");
-    for (size_t i = 0; i < kNumSensors; ++i) {
-      Serial.print(" ");
-      Serial.print(kSensors[i].GetThreshold());
-    }
-    Serial.print("\n");
-  }
-
-  void RestoreThresholds() {
-    FindLastUsedSaveSlot();
-    if(last_used_save_slot == -1) return;
-    for (size_t sensor_index = 0; sensor_index < kNumSensors; ++sensor_index) {
-      RestoreThreshold(sensor_index);
-    }
+  EepromProcessor GetEepromProcessor() {
+    return eeprom_processor_;
   }
 
  private:
    static const size_t kBufferSize = 64;
    char buffer_[kBufferSize];
+
+   EepromProcessor eeprom_processor_;
 };
 
 /*===========================================================================*/
@@ -726,7 +752,7 @@ void setup() {
     kSensors[i].Init(i + 1);
   }
   
-  serialProcessor.RestoreThresholds();
+  serialProcessor.GetEepromProcessor().LoadThresholds();
 
   #if defined(CLEAR_BIT) && defined(SET_BIT)
 	  // Set the ADC prescaler to 16 for boards that support it,
