@@ -116,7 +116,8 @@ function useWsConnection({ defaults, onCloseWs }) {
   };
 
   wsCallbacksRef.current.thresholds = function(msg) {
-    // Modify thresholds array in place instead of replacing it so that animation loops can have a stable reference.
+    // Modify thresholds array in place instead of replacing it
+    // so that animation loops can have a stable reference.
     webUIDataRef.current.curThresholds.length = 0;
     webUIDataRef.current.curThresholds.push(...msg.thresholds);
   };
@@ -261,7 +262,8 @@ function ValueMonitor(props) {
     });
 
     canvas.addEventListener('touchend', function(e) {
-      // We don't need to get the 
+      // We don't need to set the curThreshold as it's already updated within the
+      // touchstart/touchmove events.
       EmitValue(curThresholds[index]);
       is_drag = false;
     });
@@ -289,9 +291,9 @@ function ValueMonitor(props) {
     const valueLabel = valueLabelRef.current;
     const thresholdLabel = thresholdLabelRef.current;
 
-    // cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact)
+    // Cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact).
     const minFrameDurationMs = 1000 / 60.1;
-    var previousTimestamp;
+    let previousTimestamp;
 
     const render = (timestamp) => {
       const oldest = webUIDataRef.current.oldest;
@@ -328,18 +330,19 @@ function ValueMonitor(props) {
 
       // Bar
       const maxHeight = canvas.height;
-      const position = Math.round(maxHeight - currentValue/1023 * maxHeight);
-      grd = ctx.createLinearGradient(canvas.width/2, canvas.height, canvas.width/2, position);
+      const position = Math.round(maxHeight - currentValue / 1023 * maxHeight);
+      grd = ctx.createLinearGradient(canvas.width / 2, canvas.height, canvas.width / 2, position);
       grd.addColorStop(0, 'orange');
       grd.addColorStop(1, 'red');
       ctx.fillStyle = grd;
-      ctx.fillRect(canvas.width/4, position, canvas.width/2, canvas.height);
+      ctx.fillRect(canvas.width / 4, position, canvas.width / 2, canvas.height);
 
       // Threshold Line
       const threshold_height = 3
-      const threshold_pos = (1023-curThresholds[index])/1023 * canvas.height;
+      const threshold_pos = (1023 - curThresholds[index]) / 1023 * canvas.height;
       ctx.fillStyle = "black";
-      ctx.fillRect(0, threshold_pos-Math.floor(threshold_height/2), canvas.width, threshold_height);
+      ctx.fillRect(
+          0, threshold_pos - Math.floor(threshold_height / 2), canvas.width, threshold_height);
 
       // Threshold Label
       thresholdLabel.innerText = curThresholds[index];
@@ -422,7 +425,7 @@ function Plot(props) {
   // Color values for sensors
   const degreesPerSensor = 360 / numSensors;
   const colors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 40%)`);
-  const darkColors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 35%)`)
+  const darkColors = [...Array(numSensors)].map((_, i) => `hsl(${degreesPerSensor * i}, 100%, 35%)`);
 
   useEffect(() => {
     let requestId;
@@ -451,9 +454,9 @@ function Plot(props) {
       ctx.stroke();
     }
 
-    // cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact)
+    // Cap animation to 60 FPS (with slight leeway because monitor refresh rates are not exact).
     const minFrameDurationMs = 1000 / 60.1;
-    var previousTimestamp;
+    let previousTimestamp;
 
     const render = (timestamp) => {
       const oldest = webUIDataRef.current.oldest;
@@ -504,12 +507,15 @@ function Plot(props) {
           ctx.lineWidth = 2;
           for (let j = 0; j < MAX_SIZE; ++j) {
             if (j === curValues.length) { break; }
+            let y_value = (
+                box_height
+                - box_height * curValues[(j + oldest) % MAX_SIZE][i] / 1023 / plot_nums
+                - k / plot_nums * box_height
+                + spacing);
             if (j === 0) {
-              ctx.moveTo(spacing,
-                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
+              ctx.moveTo(spacing, y_value);
             } else {
-              ctx.lineTo(px_per_div*j + spacing,
-                box_height - box_height * curValues[(j + oldest) % MAX_SIZE][i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
+              ctx.lineTo(px_per_div * j + spacing, y_value);
             }
           }
           ctx.stroke();
@@ -525,8 +531,13 @@ function Plot(props) {
           ctx.setLineDash([]);
           ctx.strokeStyle = darkColors[i];
           ctx.lineWidth = 2;
-          ctx.moveTo(spacing, box_height - box_height * curThresholds[i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
-          ctx.lineTo(box_width + spacing, box_height - box_height * curThresholds[i]/1023 / plot_nums - k / plot_nums * box_height + spacing);
+          let y_value = (
+              box_height
+              - box_height * curThresholds[i] / 1023 / plot_nums
+              - k / plot_nums * box_height
+              + spacing);
+          ctx.moveTo(spacing, y_value);
+          ctx.lineTo(box_width + spacing, y_value);
           ctx.stroke();
         }
       }
@@ -596,7 +607,12 @@ function Plot(props) {
           <Col style={{height: '86vh'}}>
             <canvas
               ref={canvasRef}
-              style={{border: '1px solid white', width: '100%', height: '100%', touchAction: "none"}} />
+              style={{
+                border: '1px solid white',
+                width: '100%',
+                height: '100%',
+                touchAction: "none"
+              }} />
           </Col>
         </Row>
       </Container>
@@ -609,7 +625,7 @@ function FSRWebUI(props) {
   const numSensors = defaults.thresholds.length;
   const [profiles, setProfiles] = useState(defaults.profiles);
   const [activeProfile, setActiveProfile] = useState(defaults.cur_profile);
-  const [showPersistedAlert, setShowPersistedAlert] = useState(false);
+  const [showThresholdsSavedAlert, setShowThresholdsSavedAlert] = useState(false);
   useEffect(() => {
     const wsCallbacks = wsCallbacksRef.current;
 
@@ -619,15 +635,15 @@ function FSRWebUI(props) {
     wsCallbacks.get_cur_profile = function(msg) {
       setActiveProfile(msg.cur_profile);
     };
-    wsCallbacks.thresholds_persisted = function (msg) {
-      setShowPersistedAlert(true);
-      console.log("Persisted thresholds: ", msg.thresholds) // TODO: display them
+    wsCallbacks.thresholds_saved = function (msg) {
+      setShowThresholdsSavedAlert(true);
+      console.log("Saved thresholds: ", msg.thresholds) // TODO: display them
     };
 
     return () => {
       delete wsCallbacks.get_profiles;
       delete wsCallbacks.get_cur_profile;
-      delete wsCallbacks.thresholds_persisted;
+      delete wsCallbacks.thresholds_saved;
     };
   }, [profiles, wsCallbacksRef]);
 
@@ -642,15 +658,16 @@ function FSRWebUI(props) {
   }
 
   function RemoveProfile(e) {
-    // The X button is inside the Change Profile button, so stop the event from bubbling up and triggering the ChangeProfile handler.
+    // The X button is inside the Change Profile button,
+    // so stop the event from bubbling up and triggering the ChangeProfile handler.
     e.stopPropagation();
     // Strip out the "X " added by the button.
     const profile_name = e.target.parentNode.innerText.replace('X ', '');
     emit(['remove_profile', profile_name]);
   }
 
-  function PersistThresholds(e) {
-    emit(['persist_thresholds']);
+  function SaveThresholds(e) {
+    emit(['save_thresholds']);
   }
 
   function ChangeProfile(e) {
@@ -670,7 +687,7 @@ function FSRWebUI(props) {
                 <Nav.Link as={Link} to="/plot">Plot</Nav.Link>
               </Nav.Item>
             </Nav>
-            <Button onClick={PersistThresholds}>Persist thresholds</Button>
+            <Button alignRight onClick={SaveThresholds}>Save thresholds</Button>
             <Nav className="ml-auto">
               <NavDropdown alignRight title="Profile" id="collasible-nav-dropdown">
                 {profiles.map(function(profile) {
@@ -701,7 +718,13 @@ function FSRWebUI(props) {
               </NavDropdown>
             </Nav>
           </Navbar>
-          <Alert show={ showPersistedAlert } variant="success" dismissible onClose={()=>setShowPersistedAlert(false)}>Threshold values have been persisted successfully.</Alert>
+          <Alert show={ showThresholdsSavedAlert }
+            variant="success"
+            dismissible
+            onClose={()=>setShowThresholdsSavedAlert(false)}
+          >
+            Saved thresholds to device successfully!
+          </Alert>
         </>
         <Switch>
           <Route exact path="/">
