@@ -205,6 +205,9 @@ class SerialHandler(object):
         if cur != act:
           self.profile_handler.UpdateThresholds(i, act)
 
+    def ConfirmPersisted(values):
+      broadcast(['thresholds_persisted', {'thresholds': values}])
+
     while not thread_stop_event.is_set():
       if NO_SERIAL:
         offsets = [int(normalvariate(0, num_sensors+1)) for _ in range(num_sensors)]
@@ -240,6 +243,8 @@ class SerialHandler(object):
 
           if cmd == 'v':
             ProcessValues(values)
+          elif cmd == 'p':
+            ConfirmPersisted(values)
           elif cmd == 't':
             ProcessThresholds(values)
         except queue.Full as e:
@@ -283,6 +288,7 @@ class SerialHandler(object):
 profile_handler = ProfileHandler()
 serial_handler = SerialHandler(profile_handler, port=SERIAL_PORT)
 
+
 def update_threshold(values, index):
   try:
     # Let the writer thread handle updating thresholds.
@@ -290,6 +296,13 @@ def update_threshold(values, index):
     serial_handler.write_queue.put(threshold_cmd, block=False)
   except queue.Full:
     logger.error('Could not update thresholds. Queue full.')
+
+
+def save_thresholds():
+  try:
+    serial_handler.write_queue.put('s\n', block=False)
+  except queue.Full:
+    logger.error('Could not save thresholds to device. Queue full.')
 
 
 def add_profile(profile_name, thresholds):
@@ -385,6 +398,8 @@ async def get_ws(request):
             if action == 'update_threshold':
               values, index = data[1:]
               update_threshold(values, index)
+            elif action == 'save_thresholds':
+              save_thresholds()
             elif action == 'add_profile':
               profile_name, thresholds = data[1:]
               add_profile(profile_name, thresholds)
