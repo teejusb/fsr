@@ -97,4 +97,6 @@ Find this line, and remove the slashes at the beginning to uncomment it.
 
 The RP2040 is the microcontroller used by the Raspberry Pi Pico. The Pi Pico only exposes 3 analog input pins, but the RP2040 actually has 4. Various other RP2040 development boards do make it easy to access all 4 analog pins, which is more suitable for building a 4-panel dance pad.
 
-To run the FSR firmware on an RP2040-based device, install "Raspberry Pi Pico/RP2040" 3.6.1 or newer in the Arduino IDE boards manager. Make sure the "USB Stack" option in the Tools menu is set to "Pico SDK."
+To run the FSR firmware on an RP2040-based device, download the RP2040 Arduino Core from https://github.com/earlephilhower/arduino-pico, and follow the setup instructions.
+
+After installing the Arduino core, select your board from the Tools menu. It will be inside the **Raspberry Pi Pico/RP2040** group. Make sure the "USB Stack" option in the Tools menu is set to "Pico SDK."
