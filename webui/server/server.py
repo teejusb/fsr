@@ -247,6 +247,9 @@ class SerialHandler(object):
             ConfirmPersisted(values)
           elif cmd == 't':
             ProcessThresholds(values)
+          elif cmd == 's':
+            print("Saved thresholds to device: " +
+              str(self.profile_handler.GetCurThresholds()))
         except queue.Full as e:
           logger.error('Could not fetch new values. Queue full.')
         except serial.SerialException as e:
