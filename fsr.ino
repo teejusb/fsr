@@ -581,8 +581,9 @@ class EepromProcessor {
   private:
     size_t SaveSlotSizeBytes() {
       // +1 for the fake marker sensor, *2 because int16_t
-      return (kNumSensors + 1) * 2
+      return (kNumSensors + 1) * 2;
     }
+
     int LastSaveSlot() {
       // -1 because it's the last VALID index.
       return (EEPROM.length() / SaveSlotSizeBytes()) - 1;
@@ -639,7 +640,7 @@ class EepromProcessor {
     // Any negative number would do, as actual thresholds are >=0.
     const int16_t SAVE_SLOT_TAKEN_MARKER = -42;
     int last_used_save_slot_;
-}
+};
 
 class SerialProcessor {
  public:
@@ -723,8 +724,8 @@ class SerialProcessor {
     Serial.print("\n");
   }
 
-  EepromProcessor GetEepromProcessor() {
-    return eeprom_processor_;
+  void LoadThresholdsFromEeprom() {
+    eeprom_processor_.LoadThresholds();
   }
 
  private:
@@ -752,7 +753,7 @@ void setup() {
     kSensors[i].Init(i + 1);
   }
   
-  serialProcessor.GetEepromProcessor().LoadThresholds();
+  serialProcessor.LoadThresholdsFromEeprom();
 
   #if defined(CLEAR_BIT) && defined(SET_BIT)
 	  // Set the ADC prescaler to 16 for boards that support it,
